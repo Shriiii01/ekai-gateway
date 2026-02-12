@@ -135,5 +135,5 @@ export OPENAI_API_KEY="not-needed"  # Keys are in TEE
 ## Resources
 
 - [Oasis ROFL Docs](https://docs.oasis.io/rofl/)
-- [Oasis CLI Reference](https://docs.oasis.io/cli/)
+- [Oasis CLI Reference](https://cli.oasis.io)
 - [Testnet Faucet](https://faucet.testnet.oasis.io/)
