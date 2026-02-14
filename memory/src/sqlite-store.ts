@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import type {
   EmbedFn,
   IngestComponents,
+  IngestOptions,
   MemoryRecord,
   ProceduralMemoryRecord,
   SemanticMemoryRecord,
@@ -16,12 +17,11 @@ import { cosineSimilarity, DEFAULT_PROFILE, normalizeProfileSlug } from './utils
 import { filterAndCapWorkingMemory } from './wm.js';
 import { SemanticGraphTraversal } from './semantic-graph.js';
 
-const SECTORS: SectorName[] = ['episodic', 'semantic', 'procedural', 'affective'];
+const SECTORS: SectorName[] = ['episodic', 'semantic', 'procedural'];
 const DEFAULT_WEIGHTS: Record<SectorName, number> = {
   episodic: 1,
   semantic: 1,
   procedural: 1,
-  affective: 1,
 };
 const PER_SECTOR_K = 4;
 const WORKING_MEMORY_CAP = 8;
@@ -42,12 +42,14 @@ export class SqliteMemoryStore {
     this.graph = new SemanticGraphTraversal(this.db, this.now);
   }
 
-  async ingest(components: IngestComponents, profile?: string): Promise<MemoryRecord[]> {
+  async ingest(components: IngestComponents, profile?: string, options?: IngestOptions): Promise<MemoryRecord[]> {
     const profileId = normalizeProfileSlug(profile);
     this.ensureProfileExists(profileId);
     const createdAt = this.now();
     const rows: MemoryRecord[] = [];
     const normalized = normalizeComponents(components);
+    const source = options?.source;
+    const dedup = options?.deduplicate === true;
 
     for (const [sector, content] of Object.entries(normalized) as Array<[SectorName, string | any]>) {
       // Skip empty content
@@ -79,6 +81,7 @@ export class SqliteMemoryStore {
             embedding: [], // Will be set later
             createdAt,
             lastAccessed: createdAt,
+            source,
           };
         } else {
           textToEmbed = content.trigger;
@@ -93,6 +96,7 @@ export class SqliteMemoryStore {
             embedding: [], // Will be set later
             createdAt,
             lastAccessed: createdAt,
+            source,
           };
         }
       } else {
@@ -112,18 +116,19 @@ export class SqliteMemoryStore {
               createdAt,
               updatedAt: createdAt,
               strength: 1.0,
+              source,
             };
           } else {
             // Ensure all three fields are populated for semantic triples
             const subject = content.subject?.trim() || 'User';
             const predicate = content.predicate?.trim() || 'hasProperty';
             const object = content.object?.trim();
-            
+
             // Skip if object is missing (required for valid triple)
             if (!object) {
               continue;
             }
-            
+
             semanticRow = {
               id: randomUUID(),
               subject,
@@ -136,6 +141,7 @@ export class SqliteMemoryStore {
               createdAt,
               updatedAt: createdAt,
               strength: 1.0,
+              source,
             };
             // Embed the full triple to capture semantic relationships, not just the object
             textToEmbed = `${subject} ${predicate} ${object}`;
@@ -148,6 +154,29 @@ export class SqliteMemoryStore {
       if (sector === 'procedural' && procRow) {
         procRow.embedding = embedding;
         procRow.profileId = profileId;
+
+        // Dedup: check for near-duplicate triggers
+        if (dedup) {
+          const existingDup = this.findDuplicateProcedural(embedding, profileId, 0.9);
+          if (existingDup) {
+            // Optionally add source attribution to existing record
+            if (source && !existingDup.source) {
+              this.setProceduralSource(existingDup.id, source);
+            }
+            rows.push({
+              id: existingDup.id,
+              sector,
+              content: existingDup.trigger,
+              embedding,
+              profileId,
+              createdAt: existingDup.createdAt,
+              lastAccessed: existingDup.lastAccessed,
+              source: existingDup.source ?? source,
+            });
+            continue;
+          }
+        }
+
         this.insertProceduralRow(procRow);
         rows.push({
           id: procRow.id,
@@ -157,6 +186,7 @@ export class SqliteMemoryStore {
           profileId,
           createdAt,
           lastAccessed: createdAt,
+          source,
         });
       } else if (sector === 'semantic' && semanticRow) {
         semanticRow.embedding = embedding;
@@ -179,8 +209,15 @@ export class SqliteMemoryStore {
 
         switch (action.type) {
           case 'merge':
-            // Same object exists: strengthen it, don't insert new row
-            this.strengthenFact(action.targetId);
+            if (dedup) {
+              // Document ingestion: skip strength bump, just add source attribution
+              if (source) {
+                this.setSemanticSource(action.targetId, source);
+              }
+            } else {
+              // Chat ingestion: strengthen as before
+              this.strengthenFact(action.targetId);
+            }
             rows.push({
               id: action.targetId,
               sector,
@@ -191,6 +228,7 @@ export class SqliteMemoryStore {
               lastAccessed: createdAt,
               eventStart: null,
               eventEnd: null,
+              source,
             });
             break;
 
@@ -198,7 +236,7 @@ export class SqliteMemoryStore {
             // Different object: close old fact, then insert new
             this.supersedeFact(action.targetId);
             // Fall through to insert
-            
+
           case 'insert':
             // Insert new semantic triple
             this.insertSemanticRow(semanticRow);
@@ -212,10 +250,33 @@ export class SqliteMemoryStore {
               lastAccessed: createdAt,
               eventStart: null,
               eventEnd: null,
+              source,
             });
             break;
         }
       } else {
+        // Episodic
+        if (dedup) {
+          const existingDup = this.findDuplicateMemory(embedding, sector as SectorName, profileId, 0.9);
+          if (existingDup) {
+            // Optionally add source attribution to existing record
+            if (source && !existingDup.source) {
+              this.setMemorySource(existingDup.id, source);
+            }
+            rows.push({
+              id: existingDup.id,
+              sector: sector as SectorName,
+              content: existingDup.content,
+              embedding,
+              profileId,
+              createdAt: existingDup.createdAt,
+              lastAccessed: existingDup.lastAccessed,
+              source: existingDup.source ?? source,
+            });
+            continue;
+          }
+        }
+
         const row: MemoryRecord = {
           id: randomUUID(),
           sector,
@@ -226,6 +287,7 @@ export class SqliteMemoryStore {
           lastAccessed: createdAt,
           eventStart: sector === 'episodic' ? createdAt : null,
           eventEnd: null,
+          source,
         };
         this.insertRow(row);
         rows.push(row);
@@ -249,7 +311,6 @@ export class SqliteMemoryStore {
       episodic: [],
       semantic: [],
       procedural: [],
-      affective: [],
     };
 
     for (const sector of SECTORS) {
@@ -409,9 +470,9 @@ export class SqliteMemoryStore {
     this.db
       .prepare(
         `insert into memory (
-          id, sector, content, embedding, created_at, last_accessed, event_start, event_end, retrieval_count, profile_id
+          id, sector, content, embedding, created_at, last_accessed, event_start, event_end, retrieval_count, profile_id, source
         ) values (
-          @id, @sector, @content, json(@embedding), @createdAt, @lastAccessed, @eventStart, @eventEnd, @retrievalCount, @profileId
+          @id, @sector, @content, json(@embedding), @createdAt, @lastAccessed, @eventStart, @eventEnd, @retrievalCount, @profileId, @source
         )`,
       )
       .run({
@@ -425,6 +486,7 @@ export class SqliteMemoryStore {
         eventEnd: row.eventEnd ?? null,
         retrievalCount: (row as any).retrievalCount ?? DEFAULT_RETRIEVAL_COUNT,
         profileId: row.profileId ?? DEFAULT_PROFILE,
+        source: row.source ?? null,
       });
   }
 
@@ -432,9 +494,9 @@ export class SqliteMemoryStore {
     this.db
       .prepare(
         `insert into procedural_memory (
-          id, trigger, goal, context, result, steps, embedding, created_at, last_accessed, profile_id
+          id, trigger, goal, context, result, steps, embedding, created_at, last_accessed, profile_id, source
         ) values (
-          @id, @trigger, @goal, @context, @result, json(@steps), json(@embedding), @createdAt, @lastAccessed, @profileId
+          @id, @trigger, @goal, @context, @result, json(@steps), json(@embedding), @createdAt, @lastAccessed, @profileId, @source
         )`,
       )
       .run({
@@ -448,6 +510,7 @@ export class SqliteMemoryStore {
         createdAt: row.createdAt,
         lastAccessed: row.lastAccessed,
         profileId: row.profileId ?? DEFAULT_PROFILE,
+        source: row.source ?? null,
       });
   }
 
@@ -455,9 +518,9 @@ export class SqliteMemoryStore {
     this.db
       .prepare(
         `insert into semantic_memory (
-          id, subject, predicate, object, valid_from, valid_to, created_at, updated_at, embedding, metadata, profile_id, strength
+          id, subject, predicate, object, valid_from, valid_to, created_at, updated_at, embedding, metadata, profile_id, strength, source
         ) values (
-          @id, @subject, @predicate, @object, @validFrom, @validTo, @createdAt, @updatedAt, json(@embedding), json(@metadata), @profileId, @strength
+          @id, @subject, @predicate, @object, @validFrom, @validTo, @createdAt, @updatedAt, json(@embedding), json(@metadata), @profileId, @strength, @source
         )`,
       )
       .run({
@@ -473,14 +536,62 @@ export class SqliteMemoryStore {
         metadata: row.metadata ? JSON.stringify(row.metadata) : null,
         profileId: row.profileId ?? DEFAULT_PROFILE,
         strength: row.strength ?? 1.0,
+        source: row.source ?? null,
       });
+  }
+
+  /**
+   * Find a near-duplicate in the memory table (episodic) by embedding similarity.
+   */
+  private findDuplicateMemory(
+    embedding: number[],
+    sector: SectorName,
+    profileId: string,
+    threshold: number,
+  ): (MemoryRecord & { source?: string }) | null {
+    const candidates = this.getRowsForSector(sector, profileId, SECTOR_SCAN_LIMIT);
+    for (const row of candidates) {
+      if (cosineSimilarity(embedding, row.embedding) >= threshold) {
+        return row as MemoryRecord & { source?: string };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Find a near-duplicate procedural memory by trigger embedding similarity.
+   */
+  private findDuplicateProcedural(
+    embedding: number[],
+    profileId: string,
+    threshold: number,
+  ): (ProceduralMemoryRecord & { source?: string }) | null {
+    const candidates = this.getProceduralRows(profileId, SECTOR_SCAN_LIMIT);
+    for (const row of candidates) {
+      if (cosineSimilarity(embedding, row.embedding) >= threshold) {
+        return row as ProceduralMemoryRecord & { source?: string };
+      }
+    }
+    return null;
+  }
+
+  private setMemorySource(id: string, source: string) {
+    this.db.prepare('UPDATE memory SET source = @source WHERE id = @id').run({ id, source });
+  }
+
+  private setProceduralSource(id: string, source: string) {
+    this.db.prepare('UPDATE procedural_memory SET source = @source WHERE id = @id').run({ id, source });
+  }
+
+  private setSemanticSource(id: string, source: string) {
+    this.db.prepare('UPDATE semantic_memory SET source = @source WHERE id = @id').run({ id, source });
   }
 
   private getRowsForSector(sector: SectorName, profileId: string, limit: number): MemoryRecord[] {
     const rows = this.db
       .prepare(
         `select id, sector, content, embedding, created_at as createdAt, last_accessed as lastAccessed,
-                event_start as eventStart, event_end as eventEnd, retrieval_count as retrievalCount, profile_id as profileId
+                event_start as eventStart, event_end as eventEnd, retrieval_count as retrievalCount, profile_id as profileId, source
          from memory
          where sector = @sector and profile_id = @profileId
          order by last_accessed desc
@@ -520,7 +631,7 @@ export class SqliteMemoryStore {
   private getProceduralRows(profileId: string, limit: number): ProceduralMemoryRecord[] {
     const rows = this.db
       .prepare(
-        `select id, trigger, goal, context, result, steps, embedding, created_at as createdAt, last_accessed as lastAccessed, profile_id as profileId
+        `select id, trigger, goal, context, result, steps, embedding, created_at as createdAt, last_accessed as lastAccessed, profile_id as profileId, source
          from procedural_memory
          where profile_id = @profileId
          order by last_accessed desc
@@ -608,6 +719,7 @@ export class SqliteMemoryStore {
     this.ensureProfileIndexes();
     this.ensureProfilesTable();
     this.ensureStrengthColumn();
+    this.ensureSourceColumn();
   }
 
   /**
@@ -623,6 +735,20 @@ export class SqliteMemoryStore {
     this.db
       .prepare('CREATE INDEX IF NOT EXISTS idx_semantic_slot ON semantic_memory(subject, predicate, profile_id)')
       .run();
+  }
+
+  /**
+   * Add source column to all 3 tables if it doesn't exist.
+   * Stores the relative file path for document-ingested memories.
+   */
+  private ensureSourceColumn() {
+    const tables = ['memory', 'procedural_memory', 'semantic_memory'];
+    for (const table of tables) {
+      const columns = this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+      if (!columns.some((c) => c.name === 'source')) {
+        this.db.prepare(`ALTER TABLE ${table} ADD COLUMN source TEXT DEFAULT NULL`).run();
+      }
+    }
   }
 
   /**
@@ -877,6 +1003,5 @@ function normalizeComponents(input: IngestComponents): Record<SectorName, string
     episodic: input.episodic ?? '',
     semantic: input.semantic ?? '',
     procedural: input.procedural ?? '',
-    affective: input.affective ?? '',
   };
 }

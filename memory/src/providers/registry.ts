@@ -22,7 +22,7 @@ const PROVIDERS: Record<ProviderName, ProviderConfig> = {
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
     embedPath: 'models/:model:embedContent',
     extractPath: 'models/:model:generateContent',
-    defaultEmbedModel: 'text-embedding-004',
+    defaultEmbedModel: 'gemini-embedding-001',
     defaultExtractModel: 'gemini-2.5-flash',
     embedModelEnv: 'GEMINI_EMBED_MODEL',
     extractModelEnv: 'GEMINI_EXTRACT_MODEL',

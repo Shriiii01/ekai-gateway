@@ -1,4 +1,4 @@
-export type SectorName = 'episodic' | 'semantic' | 'procedural' | 'affective';
+export type SectorName = 'episodic' | 'semantic' | 'procedural';
 
 export interface IngestComponents {
   episodic?: string;
@@ -14,7 +14,6 @@ export interface IngestComponents {
     result?: string;
     context?: string;
   };
-  affective?: string;
 }
 
 export interface MemoryRecord {
@@ -27,6 +26,7 @@ export interface MemoryRecord {
   lastAccessed: number;
   eventStart?: number | null;
   eventEnd?: number | null;
+  source?: string;
 }
 
 export interface ProceduralMemoryRecord {
@@ -40,6 +40,7 @@ export interface ProceduralMemoryRecord {
   embedding: number[];
   createdAt: number;
   lastAccessed: number;
+  source?: string;
 }
 
 export interface SemanticMemoryRecord {
@@ -91,4 +92,9 @@ export interface GraphTraversalOptions {
 export interface GraphPath {
   path: SemanticMemoryRecord[];
   depth: number;
+}
+
+export interface IngestOptions {
+  source?: string;
+  deduplicate?: boolean;
 }

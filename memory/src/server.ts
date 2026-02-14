@@ -13,6 +13,7 @@ import { embed } from './providers/embed.js';
 import { extract } from './providers/extract.js';
 import { normalizeProfileSlug } from './utils.js';
 import type { IngestComponents } from './types.js';
+import { ingestDocuments } from './documents.js';
 
 const PORT = Number(process.env.MEMORY_PORT ?? 4005);
 const DB_PATH = process.env.MEMORY_DB_PATH ?? './memory.db';
@@ -128,6 +129,43 @@ async function main() {
       res.json({ stored: rows.length, ids: rows.map((r) => r.id), profile: normalizedProfile });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? 'ingest failed' });
+    }
+  });
+
+  app.post('/v1/ingest/documents', async (req, res) => {
+    const { path: docPath, profile, profileId } = req.body as {
+      path?: string;
+      profile?: string;
+      profileId?: string;
+    };
+
+    if (!docPath || !docPath.trim()) {
+      return res.status(400).json({ error: 'path_required' });
+    }
+
+    let normalizedProfile: string;
+    try {
+      normalizedProfile = normalizeProfileSlug(profile ?? profileId);
+    } catch (err: any) {
+      if (err?.message === 'invalid_profile') {
+        return res.status(400).json({ error: 'invalid_profile' });
+      }
+      return res.status(500).json({ error: 'profile_normalization_failed' });
+    }
+
+    // Validate path exists
+    try {
+      const fs = await import('node:fs/promises');
+      await fs.stat(docPath.trim());
+    } catch {
+      return res.status(400).json({ error: 'path_not_found' });
+    }
+
+    try {
+      const result = await ingestDocuments(docPath.trim(), store, normalizedProfile);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? 'document ingestion failed' });
     }
   });
 

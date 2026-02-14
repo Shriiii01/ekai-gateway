@@ -80,7 +80,6 @@ export class ProviderService {
     clientType?: 'openai' | 'anthropic',
     originalRequest?: unknown,
     requestId?: string,
-    clientIp?: string
   ): Promise<CanonicalResponse> {
     const provider = this.registry.getOrCreateProvider(providerName);
 
@@ -97,10 +96,7 @@ export class ProviderService {
       module: 'provider-service'
     });
 
-    const resp = await provider.chatCompletion(request);
-    // attach IP on response object for downstream (optional)
-    (resp as any)._clientIp = clientIp;
-    return resp;
+    return provider.chatCompletion(request);
   }
 
   async processStreamingRequest(
@@ -109,7 +105,6 @@ export class ProviderService {
     clientType?: 'openai' | 'anthropic',
     originalRequest?: unknown,
     requestId?: string,
-    clientIp?: string
   ): Promise<any> {
     const provider = this.registry.getOrCreateProvider(providerName);
 
@@ -125,8 +120,6 @@ export class ProviderService {
       module: 'provider-service'
     });
 
-    const stream = await provider.getStreamingResponse(request);
-    (stream as any)._clientIp = clientIp;
-    return stream;
+    return provider.getStreamingResponse(request);
   }
 }

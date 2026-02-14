@@ -2,8 +2,6 @@ import { pricingLoader, CostCalculation } from './pricing-loader.js';
 import { dbQueries, type UsageRecord } from '../db/queries.js';
 import { ModelUtils } from './model-utils.js';
 import { logger } from './logger.js';
-import { recordUsage } from '../telemetry/usage.js';
-
 /**
  * Usage summary interface for consistent return types
  */
@@ -37,7 +35,6 @@ export class UsageTracker {
    * @param outputTokens - Number of output tokens
    * @param cacheWriteTokens - Number of cache write tokens
    * @param cacheReadTokens - Number of cache read tokens
-   * @param clientIp - Client IP address for telemetry
    * @param x402PaymentAmount - Actual payment amount for x402 requests (overrides YAML pricing)
    * @returns Cost calculation or null if pricing not found
    */
@@ -48,7 +45,6 @@ export class UsageTracker {
     outputTokens: number,
     cacheWriteTokens: number = 0,
     cacheReadTokens: number = 0,
-    clientIp?: string,
     x402PaymentAmount?: string
   ): CostCalculation | null {
     // Input validation
@@ -141,24 +137,6 @@ export class UsageTracker {
           outputTokens,
           module: 'usage-tracker'
         });
-
-        // Record telemetry event for total token usage with context
-        const totalTokens = inputTokens + cacheWriteTokens + cacheReadTokens + outputTokens;
-        try {
-          recordUsage({
-            totalTokens,
-            model,
-            provider: provider.toLowerCase(),
-            requestId,
-            clientIp
-          });
-        } catch (telemetryError) {
-          // Non-blocking: log warning but don't fail the request
-          logger.warn('Failed to record telemetry', { 
-            error: telemetryError instanceof Error ? telemetryError.message : telemetryError,
-            module: 'usage-tracker' 
-          });
-        }
 
       } catch (error) {
         logger.error('Failed to save usage record', error, { operation: 'usage_tracking', module: 'usage-tracker' });

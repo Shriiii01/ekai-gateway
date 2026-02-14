@@ -58,10 +58,13 @@ A comprehensive spend dashboard for tracking AI model usage and pricing across m
 
 ### Optional: Environment Configuration
 
-The dashboard automatically connects to `http://localhost:3001` by default. If you need to connect to a different backend URL, create a `.env.local` file:
+The dashboard automatically detects the host from the browser URL and connects to the gateway (port 3001) and memory service (port 4005) on the same host. No configuration is needed for standard deployments.
+
+To override ports, set these in `.env`:
 
 ```bash
-NEXT_PUBLIC_API_BASE_URL=http://your-backend-url:port
+PORT=3001          # Gateway port
+MEMORY_PORT=4005   # Memory service port
 ```
 
 ## API Integration

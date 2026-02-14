@@ -72,7 +72,6 @@ export abstract class BaseProvider implements AIProvider {
     
     // Track usage
     if (transformedResponse.usage) {
-      const clientIp = (response as any)?._clientIp;
       usageTracker.trackUsage(
         request.model,
         this.name,
@@ -80,7 +79,6 @@ export abstract class BaseProvider implements AIProvider {
         transformedResponse.usage.outputTokens,
         transformedResponse.usage.cacheWriteInputTokens || 0,
         transformedResponse.usage.cacheReadInputTokens || 0,
-        clientIp
       );
     }
     

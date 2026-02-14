@@ -168,7 +168,6 @@ export function EditModal({ editModal, editBusy, onClose, onConfirm, onUpdate }:
                   <option value="episodic">Episodic</option>
                   <option value="semantic">Semantic</option>
                   <option value="procedural">Procedural</option>
-                  <option value="affective">Affective</option>
                 </select>
               </div>
               <div>

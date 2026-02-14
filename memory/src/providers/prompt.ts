@@ -1,4 +1,4 @@
-export const EXTRACT_PROMPT = `You are a cognitive memory extractor. If the user's message is worthwhile to be stored as long-term information, rewrite the user's message into four distinct memory types.
+export const EXTRACT_PROMPT = `You are a cognitive memory extractor. If the user's message is worthwhile to be stored as long-term information, rewrite the user's message into three distinct memory types.
 Always rewrite "I" as "User". Do NOT copy the sentence verbatim; transform it into the correct memory format.
 
 Return ONLY valid JSON with these keys:
@@ -15,8 +15,7 @@ Return ONLY valid JSON with these keys:
     "steps": [],      // ordered steps
     "result": "",     // expected outcome
     "context": ""     // optional conditions/prereqs
-  },
-  "affective": ""     // likes/dislikes/preferences/emotional tone
+  }
 }
 
 RULES:
@@ -29,12 +28,11 @@ RULES:
     - Relationships: family, friends, colleagues, connections
     - Attributes: dietary restrictions, allergies, health conditions, fitness routines
     - Preferences as facts: "User is vegetarian", "User prefers remote work"
+    - Likes/dislikes as facts: "User prefers dark-mode", "User dislikes verbose errors"
     - Career: job titles, skills, education, career goals (as facts, not aspirations)
     - Location: where User lives, works, frequently visits
     - General knowledge: definitions, facts about entities, relationships, properties
   * MUST have all three fields (subject, predicate, object) populated if used
   * If time-bounded/uncertain/temporary, leave empty {} and use episodic instead.
 - Procedural = must be a multi-step workflow or process; if not, leave empty {}.
-- Affective = emotional reactions, feelings, or preferences expressed as sentiment
-  * Note: Personal facts go in semantic; emotional reactions go in affective.
 - NEVER output anything outside the JSON.`;

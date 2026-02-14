@@ -27,9 +27,6 @@ dotenv.config({ path: join(projectRoot, '.env') });
 // Export normalized configuration values
 // NOTE: These are deprecated - use getConfig() from app-config.ts instead
 export const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
-export const TELEMETRY_ENABLED = (process.env.TELEMETRY_ENABLED ?? 'true').toLowerCase();
-export const TELEMETRY_ENDPOINT = process.env.TELEMETRY_ENDPOINT || 'https://ingest.ekailabs.xyz/ndjson';
-export const TELEMETRY_LEVEL = process.env.TELEMETRY_LEVEL || 'info';
 export const SERVICE_NAME = 'ekai-gateway';
 export const SERVICE_VERSION = process.env.npm_package_version || 'dev';
 

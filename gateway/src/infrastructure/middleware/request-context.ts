@@ -1,5 +1,4 @@
 import { Request, Response, NextFunction } from 'express';
-import { getPublicIp, isLocalAddress } from '../utils/public-ip.js';
 import { randomUUID } from 'crypto';
 
 declare global {
@@ -22,15 +21,6 @@ export function requestContext(req: Request, res: Response, next: NextFunction):
   res.setHeader('X-Request-ID', req.requestId);
   if (req.clientIp) {
     res.setHeader('X-Client-IP', req.clientIp);
-  }
-  // If local, try resolving public IP asynchronously without blocking the request.
-  if (!req.clientIp || isLocalAddress(req.clientIp)) {
-    getPublicIp().then((pub) => {
-      if (pub) {
-        (req as any).clientIp = pub;
-      }
-    }).finally(() => next());
-    return;
   }
   next();
 }

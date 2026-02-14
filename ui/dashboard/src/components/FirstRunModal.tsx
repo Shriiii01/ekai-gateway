@@ -1,33 +1,8 @@
 import { ReactNode } from 'react';
 import { useCopy } from '@/hooks/useCopy';
+import { API_CONFIG } from '@/lib/constants';
 
-// Smart API URL detection (works for ROFL, proxies, and local dev)
-const getApiBaseUrl = () => {
-  if (typeof window === 'undefined') {
-    return process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';
-  }
-
-  const envUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (envUrl && envUrl !== '__API_URL_PLACEHOLDER__') {
-    return envUrl;
-  }
-
-  // Smart fallback: derive from browser location
-  const { protocol, hostname, port } = window.location;
-  if (hostname.includes('p3000')) {
-    // ROFL-style proxy URL pattern (p3000 -> p3001)
-    return `${protocol}//${hostname.replace('p3000', 'p3001')}`;
-  }
-
-  // Local dev: dashboard on 3000, API on 3001
-  if (port === '3000') {
-    return `${protocol}//${hostname}:3001`;
-  }
-
-  return 'http://localhost:3001';
-};
-
-const API_BASE_URL = getApiBaseUrl();
+const API_BASE_URL = API_CONFIG.BASE_URL;
 const DASHBOARD_URL = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
 
 interface FirstRunModalProps {

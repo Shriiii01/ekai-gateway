@@ -7,14 +7,12 @@ const sectorColors: Record<MemorySectorSummary['sector'], string> = {
   episodic: 'bg-indigo-100 text-indigo-700 border-indigo-200',
   semantic: 'bg-emerald-100 text-emerald-700 border-emerald-200',
   procedural: 'bg-amber-100 text-amber-700 border-amber-200',
-  affective: 'bg-rose-100 text-rose-700 border-rose-200',
 };
 
 const sectorDescriptions: Record<MemorySectorSummary['sector'], string> = {
   episodic: 'Personal events and experiences the system has encountered.',
   semantic: 'Facts, concepts, and general knowledge extracted from interactions.',
   procedural: 'Multi-step skills, workflows, and how-to instructions.',
-  affective: 'User preferences, likes/dislikes, and value-based tendencies.',
 };
 
 const capitalizeSector = (sector: string): string => {

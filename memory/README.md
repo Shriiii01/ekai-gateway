@@ -14,14 +14,14 @@ Env (root `.env` or `memory/.env`):
 
 - `GOOGLE_API_KEY` (required for Gemini extract/embeds)
 - Optional: `GEMINI_EXTRACT_MODEL` (default `gemini-2.5-flash`)
-- Optional: `GEMINI_EMBED_MODEL` (default `text-embedding-004`)
+- Optional: `GEMINI_EMBED_MODEL` (default `gemini-embedding-001`)
 - Optional: `MEMORY_PORT` (default `4005`)
 - Optional: `MEMORY_DB_PATH` (default `./memory.db`)
 - Optional: `MEMORY_CORS_ORIGIN`
 
 ## API (v0)
 
-- `POST /v1/ingest` — ingest an experience  
+- `POST /v1/ingest` — ingest an experience
   Body:
   ```json
   {
@@ -39,6 +39,17 @@ Env (root `.env` or `memory/.env`):
   ```
   Requires at least one user message. `reasoning`, `feedback`, and `metadata` are optional and currently not used in extraction/scoring (feedback is not yet applied; retrieval_count drives expected_value).
 
+- `POST /v1/ingest/documents` — ingest markdown files from a directory
+  Body:
+  ```json
+  { "path": "/path/to/markdown/folder", "profile": "project-x" }
+  ```
+  Reads all `.md` files recursively, chunks by markdown headings, extracts memories via LLM, and stores with deduplication + source attribution. Re-ingesting the same folder is safe — duplicates are skipped.
+  Response:
+  ```json
+  { "ingested": 5, "chunks": 18, "stored": 31, "skipped": 4, "errors": [], "profile": "project-x" }
+  ```
+
 - `POST /v1/search` — body `{ "query": "..." }` → returns `{ workingMemory, perSector }` with PBWM gating.
 
 - `GET /v1/summary` — per-sector counts + recent items (includes procedural details).
@@ -49,12 +60,13 @@ Env (root `.env` or `memory/.env`):
 
 ## Data model (SQLite)
 
-- `memory` table for episodic / semantic / affective:  
-  `id, sector, content, embedding, created_at, last_accessed, event_start, event_end`.
-- `procedural_memory` table for structured procedures:  
-  `trigger, goal, context, result, steps[], embedding, timestamps`.
+- `memory` table for episodic:
+  `id, sector, content, embedding, created_at, last_accessed, event_start, event_end, source`.
+- `procedural_memory` table for structured procedures:
+  `trigger, goal, context, result, steps[], embedding, timestamps, source`.
 - `retrieval_count` tracks how often a memory enters working memory; used in PBWM expected_value.
-- `semantic_memory` (graph-lite facts): `subject, predicate, object, valid_from, valid_to, strength, embedding, metadata`.
+- `semantic_memory` (graph-lite facts): `subject, predicate, object, valid_from, valid_to, strength, embedding, metadata, source`.
+- `source` column (`TEXT DEFAULT NULL`) stores the relative file path for document-ingested memories (e.g., `notes/architecture.md`). NULL for chat-ingested memories.
 
 ## Semantic Consolidation
 
@@ -98,12 +110,11 @@ graph TB
   classDef outputStyle fill:#e8f5e9,stroke:#388e3c,stroke-width:2px,color:#1b5e20
 
   EXP["Experience Ingest<br>messages + reasoning/feedback"]:::inputStyle
-  EXTRACT["Extractor (Gemini)<br>episodic / semantic / procedural / affective"]:::processStyle
+  EXTRACT["Extractor (Gemini)<br>episodic / semantic / procedural"]:::processStyle
 
   EPISODIC["Episodic"]:::sectorStyle
   SEMANTIC["Semantic"]:::sectorStyle
   PROCEDURAL["Procedural<br>structured: trigger / goal / steps"]:::sectorStyle
-  AFFECTIVE["Affective"]:::sectorStyle
 
   EMBED["Embedder (Gemini)<br>text-embedding-004"]:::processStyle
 
@@ -124,14 +135,12 @@ graph TB
   EXTRACT --> EPISODIC
   EXTRACT --> SEMANTIC
   EXTRACT --> PROCEDURAL
-  EXTRACT --> AFFECTIVE
 
   EPISODIC --> EMBED
   SEMANTIC --> FACTGRAPH
   FACTGRAPH --> EMBED
   PROCEDURAL --> STEPGRAPH
   STEPGRAPH --> EMBED
-  AFFECTIVE --> EMBED
 
   EMBED --> STORE
 

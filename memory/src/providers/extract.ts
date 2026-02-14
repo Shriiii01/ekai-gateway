@@ -28,7 +28,6 @@ export async function extract(text: string): Promise<IngestComponents> {
       episodic: parsed.episodic ?? '',
       semantic: parsed.semantic ?? '',
       procedural: parsed.procedural ?? '',
-      affective: parsed.affective ?? '',
     };
   }
 
@@ -56,6 +55,5 @@ export async function extract(text: string): Promise<IngestComponents> {
     episodic: parsed.episodic ?? '',
     semantic: parsed.semantic ?? '',
     procedural: parsed.procedural ?? '',
-    affective: parsed.affective ?? '',
   };
 }

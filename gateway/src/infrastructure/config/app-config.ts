@@ -18,7 +18,7 @@ export class AppConfig {
     enabled: this.has('PRIVATE_KEY'),
     privateKey: this.getOptionalString('PRIVATE_KEY'),
     baseUrl: this.getString('X402_BASE_URL', 'https://x402.ekailabs.xyz'),
-    
+
     // Helper methods
     get chatCompletionsUrl() {
       return `${this.baseUrl}/v1/chat/completions`;
@@ -61,29 +61,12 @@ export class AppConfig {
     },
   };
 
-  // Telemetry configuration
-  readonly telemetry = {
-    enabled: this.getBoolean('ENABLE_TELEMETRY', true),
-    endpoint: this.getOptionalString('TELEMETRY_ENDPOINT'),
-  };
-
   // OpenRouter-specific configuration
   readonly openrouter = {
     skipPricingRefresh: this.getBoolean('SKIP_OPENROUTER_PRICING_REFRESH', false),
     pricingTimeoutMs: this.getNumber('OPENROUTER_PRICING_TIMEOUT_MS', 4000),
     pricingRetries: this.getNumber('OPENROUTER_PRICING_RETRIES', 2),
   };
-
-  // Feature flags
-  readonly features = {
-    usageTracking: this.getBoolean('ENABLE_USAGE_TRACKING', true),
-  };
-
-  // Memory service configuration (FIFO file backend by default)
-  readonly memory = {
-    backend: this.getString('MEMORY_BACKEND', 'file'),
-    maxItems: this.getNumber('MEMORY_MAX_ITEMS', 20),
-  } as const;
 
   // Helper methods
   private has(key: string): boolean {
@@ -164,4 +147,3 @@ export function getConfig(): AppConfig {
 export function resetConfig(): void {
   configInstance = null;
 }
-

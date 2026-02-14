@@ -55,10 +55,13 @@ docker run --env-file .env -p 3001:3001 -p 3000:3000 ghcr.io/ekailabs/ekai-gatew
 
 Important: The dashboard is initially empty. After setup, send a query using your own client/tool (IDE, app, or API) through the gateway; usage appears once at least one request is processed.
 
-**Access Points:**
-- Gateway API: `http://localhost:3001`
-- Dashboard UI: `http://localhost:3000`
+**Access Points (default ports, configurable in `.env`):**
+- Gateway API: port `3001` (`PORT`)
+- Dashboard UI: port `3000`
+- Memory Service: port `4005` (`MEMORY_PORT`)
 - Detailed setup steps live in `docs/getting-started.md`; check `docs/` for additional guides.
+
+The dashboard auto-detects the host and connects to the gateway and memory service on the same host using their configured ports. No extra URL configuration needed.
 
 ### Build the Image Yourself (optional)
 
@@ -123,6 +126,7 @@ codex
 ekai-gateway/
 ├── gateway/          # Backend API and routing
 ├── ui/              # Dashboard frontend
+├── memory/          # Agent memory service
 ├── shared/          # Shared types and utilities
 └── package.json     # Root package configuration
 ```
@@ -190,25 +194,28 @@ The proxy uses **cost-based optimization** to automatically select the cheapest 
 
 ```bash
 npm run build  # Build TypeScript for production
-npm start      # Start both gateway and dashboard
+npm start      # Start gateway, dashboard, and memory service
 ```
 
-**Individual services:**
+**Individual services (ports configurable via `PORT` and `MEMORY_PORT` in `.env`):**
 ```bash
-npm run start:gateway  # Gateway API only (port 3001)
-npm run start:ui       # Dashboard UI only (port 3000)
+npm run start:gateway  # Gateway API only (default: 3001)
+npm run start:ui       # Dashboard UI only (default: 3000)
+npm run start:memory   # Memory service only (default: 4005)
 ```
 
 ## Development
 
 ```bash
-npm run dev    # Start both gateway and dashboard in development mode
+npm run dev      # Start gateway and dashboard in development mode
+npm run dev:all  # Start gateway, dashboard, and memory service
 ```
 
 **Individual services:**
 ```bash
 cd gateway && npm run dev    # Gateway only (port 3001)
 cd ui/dashboard && npm run dev    # Dashboard only (port 3000)
+cd memory && npm start       # Memory service only (port 4005)
 ```
 
 ## Contributing

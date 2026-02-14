@@ -2,7 +2,6 @@ import { Response as ExpressResponse } from 'express';
 import { AuthenticationError, PaymentError, ProviderError } from '../../shared/errors/index.js';
 import { logger } from '../utils/logger.js';
 import { CONTENT_TYPES, HTTP_STATUS } from '../../domain/types/provider.js';
-import { injectMemoryContext, persistMemory } from '../memory/memory-helper.js';
 
 export type ChatUsageFormat = 'openai_chat';
 
@@ -65,8 +64,6 @@ export class ChatCompletionsPassthrough {
   private x402FetchFunction: typeof fetch | null = null;
   private x402Initialized = false;
   private lastX402PaymentAmount: string | undefined = undefined;
-  private assistantResponseBuffer = '';
-
   constructor(private readonly config: ChatCompletionsPassthroughConfig) {
     // Initialize x402 payment wrapper once if needed
     this.initializeX402Support();
@@ -275,7 +272,7 @@ export class ChatCompletionsPassthrough {
   }
 
 
-  private recordOpenAIUsage(usage: OpenAIChatUsage, model: string, clientIp?: string): void {
+  private recordOpenAIUsage(usage: OpenAIChatUsage, model: string): void {
     const totalInputTokens = usage.prompt_tokens ?? 0;
     const cachedPromptTokens = usage.prompt_tokens_details?.cached_tokens ?? 0;
     const nonCachedPromptTokens = totalInputTokens - cachedPromptTokens;
@@ -304,7 +301,6 @@ export class ChatCompletionsPassthrough {
           completionTokens,
           Math.max(cachedPromptTokens, 0),
           0,
-          clientIp,
           this.lastX402PaymentAmount, // Pass x402 payment amount if available
         );
         // Clear payment amount after tracking
@@ -319,12 +315,12 @@ export class ChatCompletionsPassthrough {
       });
   }
 
-  private recordUsage(usage: unknown, model: string, clientIp?: string): void {
+  private recordUsage(usage: unknown, model: string): void {
     if (!usage || !this.config.usage?.format) return;
 
     switch (this.config.usage.format) {
       case 'openai_chat':
-        this.recordOpenAIUsage(usage as OpenAIChatUsage, model, clientIp);
+        this.recordOpenAIUsage(usage as OpenAIChatUsage, model);
         break;
       default:
         logger.warn('Unsupported usage format for chat completions passthrough', {
@@ -335,7 +331,7 @@ export class ChatCompletionsPassthrough {
     }
   }
 
-  private processStreamingChunk(chunk: string, model: string, clientIp?: string): void {
+  private processStreamingChunk(chunk: string, model: string): void {
     try {
       this.eventBuffer += chunk;
 
@@ -354,13 +350,8 @@ export class ChatCompletionsPassthrough {
         try {
           const parsed = JSON.parse(payload);
           
-          // Extract assistant response content
-          if (parsed?.choices?.[0]?.delta?.content) {
-            this.assistantResponseBuffer += parsed.choices[0].delta.content;
-          }
-          
           if (parsed?.usage) {
-            this.recordUsage(parsed.usage, model, clientIp);
+            this.recordUsage(parsed.usage, model);
             // reset buffer after successful usage capture to avoid duplicate processing
             this.eventBuffer = '';
           }
@@ -385,26 +376,9 @@ export class ChatCompletionsPassthrough {
     }
   }
 
-  async handleDirectRequest(request: any, res: ExpressResponse, clientIp?: string): Promise<void> {
+  async handleDirectRequest(request: any, res: ExpressResponse): Promise<void> {
     this.eventBuffer = '';
-    this.assistantResponseBuffer = '';
     this.lastX402PaymentAmount = undefined; // Reset payment amount for new request
-
-    // Retrieve and inject memory context
-    injectMemoryContext(request, {
-      provider: this.config.provider,
-      defaultUserId: 'default',
-      extractCurrentUserInputs: req => extractOpenAIUserMessages(req),
-      applyMemoryContext: (req, context) => {
-        if (!req.messages) {
-          req.messages = [];
-        }
-        req.messages.unshift({
-          role: 'system',
-          content: context,
-        });
-      }
-    });
 
     if (request?.stream) {
       const response = await this.makeRequest(request, true);
@@ -433,22 +407,11 @@ export class ChatCompletionsPassthrough {
         if (done) break;
 
         const text = new TextDecoder().decode(value);
-        setImmediate(() => this.processStreamingChunk(text, request?.model, clientIp));
+        setImmediate(() => this.processStreamingChunk(text, request?.model));
         res.write(value);
       }
 
       res.end();
-      
-      // Persist memory after streaming completes
-      persistMemory(request, this.assistantResponseBuffer, {
-        provider: this.config.provider,
-        defaultUserId: 'default',
-        extractUserContent: req => extractOpenAILastUserContent(req),
-        metadataBuilder: req => ({
-          model: req.model,
-          provider: this.config.provider,
-        }),
-      });
       return;
     }
 
@@ -464,46 +427,10 @@ export class ChatCompletionsPassthrough {
     const json = await response.json();
 
     if (json?.usage) {
-      this.recordUsage(json.usage, request?.model, clientIp);
+      this.recordUsage(json.usage, request?.model);
     }
-
-    // Extract assistant response from non-streaming response
-    const assistantResponse = json?.choices?.[0]?.message?.content || '';
-    persistMemory(request, assistantResponse, {
-      provider: this.config.provider,
-      defaultUserId: 'default',
-      extractUserContent: req => extractOpenAILastUserContent(req),
-      metadataBuilder: req => ({
-        model: req.model,
-        provider: this.config.provider,
-      }),
-    });
 
     res.status(HTTP_STATUS.OK).json(json);
   }
-  
-}
 
-function extractOpenAIUserMessages(request: any): string[] {
-  const currentMessages = request.messages || [];
-  return currentMessages
-    .filter((msg: any) => msg.role === 'user')
-    .map((msg: any) => {
-      const content = typeof msg.content === 'string'
-        ? msg.content
-        : JSON.stringify(msg.content);
-      return content;
-    });
-}
-
-function extractOpenAILastUserContent(request: any): string | null {
-  const messages = request.messages || [];
-  const userMessages = messages.filter((msg: any) => msg.role === 'user');
-  if (!userMessages.length) {
-    return null;
-  }
-  const lastUserMessage = userMessages[userMessages.length - 1];
-  return typeof lastUserMessage.content === 'string'
-    ? lastUserMessage.content
-    : JSON.stringify(lastUserMessage.content);
 }

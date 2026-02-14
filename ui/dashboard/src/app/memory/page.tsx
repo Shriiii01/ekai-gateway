@@ -174,12 +174,11 @@ export default function MemoryVaultPage() {
 
   // Calculate sector counts for ProfileStats
   const sectorCounts = useMemo(() => {
-    if (!data) return { episodic: 0, procedural: 0, semantic: 0, affective: 0 };
+    if (!data) return { episodic: 0, procedural: 0, semantic: 0 };
     return {
       episodic: data.summary.find(s => s.sector === 'episodic')?.count ?? 0,
       procedural: data.summary.find(s => s.sector === 'procedural')?.count ?? 0,
       semantic: data.summary.find(s => s.sector === 'semantic')?.count ?? 0,
-      affective: data.summary.find(s => s.sector === 'affective')?.count ?? 0,
     };
   }, [data]);
 
@@ -309,7 +308,6 @@ export default function MemoryVaultPage() {
               episodicCount={sectorCounts.episodic}
               proceduralCount={sectorCounts.procedural}
               semanticCount={sectorCounts.semantic}
-              affectiveCount={sectorCounts.affective}
               totalRetrievals={quickStats?.totalRetrievals ?? 0}
             />
             
@@ -363,7 +361,6 @@ export default function MemoryVaultPage() {
                   <option value="all">All Sectors</option>
                   <option value="episodic">Episodic</option>
                   <option value="procedural">Procedural</option>
-                  <option value="affective">Affective</option>
                 </select>
                 <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
                   <svg className="w-4 h-4 text-stone-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
