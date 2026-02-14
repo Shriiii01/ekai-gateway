@@ -3,7 +3,7 @@
   "version": "0.1.0-beta.1",
   "description": "Ekai Gateway - Multi-provider AI request routing with dashboard",
   "private": true,
-  "workspaces": ["gateway", "ui/dashboard", "memory"],
+  "workspaces": ["gateway", "ui/dashboard", "memory", "integrations/openrouter"],
   "scripts": {
     "dev": "concurrently \"npm run dev --workspace=gateway\" \"npm run dev --workspace=ui/dashboard\"",
     "dev:core": "concurrently \"npm run dev --workspace=gateway\" \"npm run dev --workspace=ui/dashboard\"",
@@ -16,7 +16,9 @@
     "dev:ui": "npm run dev --workspace=ui/dashboard",
     "start:gateway": "npm run start --workspace=gateway",
     "start:ui": "npx --workspace=ui/dashboard next start -p 3000 -H 0.0.0.0",
-    "start:memory": "npm run start --workspace=memory"
+    "start:memory": "npm run start --workspace=memory",
+    "dev:openrouter": "npm run dev --workspace=@ekai/openrouter",
+    "dev:memory+openrouter": "concurrently \"npm run start --workspace=memory\" \"npm run dev --workspace=@ekai/openrouter\""
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
