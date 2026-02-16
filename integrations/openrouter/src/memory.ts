@@ -1,7 +1,7 @@
 import { MEMORY_URL } from './config.js';
 
 interface QueryResult {
-  sector: 'episodic' | 'semantic' | 'procedural';
+  sector: 'episodic' | 'semantic' | 'procedural' | 'reflective';
   content: string;
   score: number;
   details?: {
@@ -9,6 +9,7 @@ interface QueryResult {
     subject?: string;
     predicate?: string;
     object?: string;
+    domain?: string;
     // procedural
     trigger?: string;
     steps?: string[];
@@ -29,6 +30,7 @@ interface SearchResponse {
 export async function fetchMemoryContext(
   query: string,
   profile: string,
+  userId?: string,
 ): Promise<QueryResult[] | null> {
   try {
     const controller = new AbortController();
@@ -37,7 +39,7 @@ export async function fetchMemoryContext(
     const res = await fetch(`${MEMORY_URL}/v1/search`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, profile }),
+      body: JSON.stringify({ query, profile, userId }),
       signal: controller.signal,
     });
     clearTimeout(timeout);
@@ -57,11 +59,13 @@ export async function fetchMemoryContext(
 
 /**
  * Format memory results into a system message block, grouped by sector.
+ * Uses agent-voice section names.
  */
 export function formatMemoryBlock(results: QueryResult[]): string {
   const facts: string[] = [];
   const events: string[] = [];
   const procedures: string[] = [];
+  const observations: string[] = [];
 
   for (const r of results) {
     if (r.sector === 'semantic' && r.details?.subject) {
@@ -69,15 +73,18 @@ export function formatMemoryBlock(results: QueryResult[]): string {
     } else if (r.sector === 'procedural' && r.details?.trigger) {
       const steps = r.details.steps?.join(' → ') || r.content;
       procedures.push(`- When ${r.details.trigger}: ${steps}`);
+    } else if (r.sector === 'reflective') {
+      observations.push(`- ${r.content}`);
     } else {
       events.push(`- ${r.content}`);
     }
   }
 
   const sections: string[] = [];
-  if (facts.length) sections.push(`Facts:\n${facts.join('\n')}`);
-  if (events.length) sections.push(`Events:\n${events.join('\n')}`);
-  if (procedures.length) sections.push(`Procedures:\n${procedures.join('\n')}`);
+  if (facts.length) sections.push(`What I know:\n${facts.join('\n')}`);
+  if (events.length) sections.push(`What I remember:\n${events.join('\n')}`);
+  if (procedures.length) sections.push(`How I do things:\n${procedures.join('\n')}`);
+  if (observations.length) sections.push(`My observations:\n${observations.join('\n')}`);
 
   return `<memory>\n[Recalled context for this conversation. Use naturally if relevant, ignore if not.]\n\n${sections.join('\n\n')}\n</memory>`;
 }
