@@ -2,6 +2,26 @@ provider: openrouter
 currency: USD
 unit: MTok
 models:
+  qwen/qwen3.5-plus-02-15:
+    id: qwen/qwen3.5-plus-02-15
+    input: 0.4
+    output: 2.4
+    original_provider: qwen
+  qwen3.5-plus-02-15:
+    id: qwen/qwen3.5-plus-02-15
+    input: 0.4
+    output: 2.4
+    original_provider: qwen
+  qwen/qwen3.5-397b-a17b:
+    id: qwen/qwen3.5-397b-a17b
+    input: 0.6
+    output: 3.6
+    original_provider: qwen
+  qwen3.5-397b-a17b:
+    id: qwen/qwen3.5-397b-a17b
+    input: 0.6
+    output: 3.6
+    original_provider: qwen
   minimax/minimax-m2.5:
     id: minimax/minimax-m2.5
     input: 0.3
@@ -14,13 +34,13 @@ models:
     original_provider: minimax
   z-ai/glm-5:
     id: z-ai/glm-5
-    input: 0.8
-    output: 2.56
+    input: 0.3
+    output: 2.55
     original_provider: z-ai
   glm-5:
     id: z-ai/glm-5
-    input: 0.8
-    output: 2.56
+    input: 0.3
+    output: 2.55
     original_provider: z-ai
   qwen/qwen3-max-thinking:
     id: qwen/qwen3-max-thinking
@@ -104,13 +124,13 @@ models:
     original_provider: arcee-ai
   moonshotai/kimi-k2.5:
     id: moonshotai/kimi-k2.5
-    input: 0.45
-    output: 2.25
+    input: 0.23
+    output: 3
     original_provider: moonshotai
   kimi-k2.5:
     id: moonshotai/kimi-k2.5
-    input: 0.45
-    output: 2.25
+    input: 0.23
+    output: 3
     original_provider: moonshotai
   upstage/solar-pro-3:free:
     id: upstage/solar-pro-3:free
@@ -1184,13 +1204,13 @@ models:
     original_provider: nvidia
   moonshotai/kimi-k2-0905:
     id: moonshotai/kimi-k2-0905
-    input: 0.39
-    output: 1.9
+    input: 0.4
+    output: 2
     original_provider: moonshotai
   kimi-k2-0905:
     id: moonshotai/kimi-k2-0905
-    input: 0.39
-    output: 1.9
+    input: 0.4
+    output: 2
     original_provider: moonshotai
   moonshotai/kimi-k2-0905:exacto:
     id: moonshotai/kimi-k2-0905:exacto
@@ -2352,16 +2372,6 @@ models:
     input: 0.075
     output: 0.3
     original_provider: google
-  anthropic/claude-3.7-sonnet:thinking:
-    id: anthropic/claude-3.7-sonnet:thinking
-    input: 3
-    output: 15
-    original_provider: anthropic
-  claude-3.7-sonnet:thinking:
-    id: anthropic/claude-3.7-sonnet:thinking
-    input: 3
-    output: 15
-    original_provider: anthropic
   anthropic/claude-3.7-sonnet:
     id: anthropic/claude-3.7-sonnet
     input: 3
@@ -2369,6 +2379,16 @@ models:
     original_provider: anthropic
   claude-3.7-sonnet:
     id: anthropic/claude-3.7-sonnet
+    input: 3
+    output: 15
+    original_provider: anthropic
+  anthropic/claude-3.7-sonnet:thinking:
+    id: anthropic/claude-3.7-sonnet:thinking
+    input: 3
+    output: 15
+    original_provider: anthropic
+  claude-3.7-sonnet:thinking:
+    id: anthropic/claude-3.7-sonnet:thinking
     input: 3
     output: 15
     original_provider: anthropic
@@ -3403,7 +3423,7 @@ models:
     output: 1.5
     original_provider: openai
 metadata:
-  last_updated: '2026-02-14'
+  last_updated: '2026-02-16'
   source: https://openrouter.ai/api/v1/models
   notes: Auto-refreshed from OpenRouter models API
   version: auto
