@@ -19,9 +19,7 @@ Multi-provider AI proxy with usage dashboard supporting Anthropic, OpenAI, Googl
 
 ## 🎥 Demo Video
 
-<a href="https://youtu.be/hZC1Y_dWdhI" target="_blank">
-  <img src="https://img.youtube.com/vi/hZC1Y_dWdhI/0.jpg" alt="Demo Video" width="560" height="315">
-</a>
+{% embed url="https://www.youtube.com/watch?v=sLg9YmYtg64" %}
 
 ## Quick Start (Beta)
 
