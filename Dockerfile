@@ -146,9 +146,11 @@ RUN cd memory && npm install --omit=dev
 COPY --from=memory-build /app/memory/dist ./memory/dist
 RUN mkdir -p /app/memory/data
 
-# OpenRouter (depends on memory package above)
+# OpenRouter — rewrite workspace ref to local file path before install
 COPY integrations/openrouter/package.json ./integrations/openrouter/
-RUN cd integrations/openrouter && npm install --omit=dev
+RUN cd integrations/openrouter && \
+    sed -i 's|"@ekai/memory": "\*"|"@ekai/memory": "file:../../memory"|' package.json && \
+    npm install --omit=dev
 COPY --from=openrouter-build /app/integrations/openrouter/dist ./integrations/openrouter/dist
 
 # Entrypoint
