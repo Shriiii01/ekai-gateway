@@ -49,22 +49,6 @@ curl "localhost:4010/v1/summary?profile=clay-test"
 
 Expected: summary shows counts > 0 in episodic and/or semantic sectors.
 
-## Using OpenAI directly (alternative)
-
-If you have an OpenAI API key and prefer to use it for memory extraction/embedding instead of routing through OpenRouter:
-
-```sh
-docker run -d --name ekai \
-  -e OPENROUTER_API_KEY=sk-or-...          \
-  -e OPENAI_API_KEY=sk-...                 \
-  -e MEMORY_EMBED_PROVIDER=openai          \
-  -e MEMORY_EXTRACT_PROVIDER=openai        \
-  -p 4010:4010 \
-  ekai-openrouter
-```
-
-This uses OpenAI directly for embeddings (`text-embedding-3-small`) and extraction (`gpt-4o-mini`), while still proxying chat completions through OpenRouter. Override models with `OPENAI_EMBED_MODEL` and `OPENAI_EXTRACT_MODEL`.
-
 ## Dashboard
 
 Open http://localhost:4010/memory to browse the Memory Vault UI.
