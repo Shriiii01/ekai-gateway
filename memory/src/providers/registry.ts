@@ -1,4 +1,4 @@
-type ProviderName = 'gemini' | 'openai';
+type ProviderName = 'gemini' | 'openai' | 'openrouter';
 
 type AuthMode = 'queryKey' | 'bearer';
 
@@ -41,11 +41,23 @@ const PROVIDERS: Record<ProviderName, ProviderConfig> = {
     extractModelEnv: 'OPENAI_EXTRACT_MODEL',
     auth: 'bearer',
   },
+  openrouter: {
+    name: 'openrouter',
+    apiKeyEnv: 'OPENROUTER_API_KEY',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    embedPath: 'embeddings',
+    extractPath: 'chat/completions',
+    defaultEmbedModel: 'openai/text-embedding-3-small',
+    defaultExtractModel: 'openai/gpt-4o-mini',
+    embedModelEnv: 'OPENROUTER_EMBED_MODEL',
+    extractModelEnv: 'OPENROUTER_EXTRACT_MODEL',
+    auth: 'bearer',
+  },
 };
 
 export function resolveProvider(kind: 'embed' | 'extract'): ProviderConfig {
   const env = (kind === 'embed' ? process.env.MEMORY_EMBED_PROVIDER : process.env.MEMORY_EXTRACT_PROVIDER)?.toLowerCase() as ProviderName | undefined;
-  const selected = env === 'openai' ? 'openai' : 'gemini';
+  const selected: ProviderName = env === 'openai' ? 'openai' : env === 'openrouter' ? 'openrouter' : 'gemini';
   return PROVIDERS[selected];
 }
 

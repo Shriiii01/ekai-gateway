@@ -2,6 +2,16 @@ provider: openrouter
 currency: USD
 unit: MTok
 models:
+  anthropic/claude-sonnet-4.6:
+    id: anthropic/claude-sonnet-4.6
+    input: 3
+    output: 15
+    original_provider: anthropic
+  claude-sonnet-4.6:
+    id: anthropic/claude-sonnet-4.6
+    input: 3
+    output: 15
+    original_provider: anthropic
   qwen/qwen3.5-plus-02-15:
     id: qwen/qwen3.5-plus-02-15
     input: 0.4
@@ -14,23 +24,23 @@ models:
     original_provider: qwen
   qwen/qwen3.5-397b-a17b:
     id: qwen/qwen3.5-397b-a17b
-    input: 0.6
-    output: 3.6
+    input: 0.15
+    output: 1
     original_provider: qwen
   qwen3.5-397b-a17b:
     id: qwen/qwen3.5-397b-a17b
-    input: 0.6
-    output: 3.6
+    input: 0.15
+    output: 1
     original_provider: qwen
   minimax/minimax-m2.5:
     id: minimax/minimax-m2.5
     input: 0.3
-    output: 1.2
+    output: 1.1
     original_provider: minimax
   minimax-m2.5:
     id: minimax/minimax-m2.5
     input: 0.3
-    output: 1.2
+    output: 1.1
     original_provider: minimax
   z-ai/glm-5:
     id: z-ai/glm-5
@@ -74,13 +84,13 @@ models:
     original_provider: anthropic
   qwen/qwen3-coder-next:
     id: qwen/qwen3-coder-next
-    input: 0.07
-    output: 0.3
+    input: 0.12
+    output: 0.75
     original_provider: qwen
   qwen3-coder-next:
     id: qwen/qwen3-coder-next
-    input: 0.07
-    output: 0.3
+    input: 0.12
+    output: 0.75
     original_provider: qwen
   openrouter/free:
     id: openrouter/free
@@ -274,13 +284,13 @@ models:
     original_provider: minimax
   z-ai/glm-4.7:
     id: z-ai/glm-4.7
-    input: 0.4
-    output: 1.5
+    input: 0.38
+    output: 1.7
     original_provider: z-ai
   glm-4.7:
     id: z-ai/glm-4.7
-    input: 0.4
-    output: 1.5
+    input: 0.38
+    output: 1.7
     original_provider: z-ai
   google/gemini-3-flash-preview:
     id: google/gemini-3-flash-preview
@@ -374,13 +384,13 @@ models:
     original_provider: openai
   mistralai/devstral-2512:
     id: mistralai/devstral-2512
-    input: 0.05
-    output: 0.22
+    input: 0.4
+    output: 2
     original_provider: mistralai
   devstral-2512:
     id: mistralai/devstral-2512
-    input: 0.05
-    output: 0.22
+    input: 0.4
+    output: 2
     original_provider: mistralai
   relace/relace-search:
     id: relace/relace-search
@@ -514,22 +524,22 @@ models:
     original_provider: arcee-ai
   deepseek/deepseek-v3.2-speciale:
     id: deepseek/deepseek-v3.2-speciale
-    input: 0.27
-    output: 0.41
+    input: 0.4
+    output: 1.2
     original_provider: deepseek
   deepseek-v3.2-speciale:
     id: deepseek/deepseek-v3.2-speciale
-    input: 0.27
-    output: 0.41
+    input: 0.4
+    output: 1.2
     original_provider: deepseek
   deepseek/deepseek-v3.2:
     id: deepseek/deepseek-v3.2
-    input: 0.25
+    input: 0.26
     output: 0.38
     original_provider: deepseek
   deepseek-v3.2:
     id: deepseek/deepseek-v3.2
-    input: 0.25
+    input: 0.26
     output: 0.38
     original_provider: deepseek
   prime-intellect/intellect-3:
@@ -542,16 +552,6 @@ models:
     input: 0.2
     output: 1.1
     original_provider: prime-intellect
-  tngtech/tng-r1t-chimera:
-    id: tngtech/tng-r1t-chimera
-    input: 0.25
-    output: 0.85
-    original_provider: tngtech
-  tng-r1t-chimera:
-    id: tngtech/tng-r1t-chimera
-    input: 0.25
-    output: 0.85
-    original_provider: tngtech
   anthropic/claude-opus-4.5:
     id: anthropic/claude-opus-4.5
     input: 5
@@ -935,12 +935,12 @@ models:
   z-ai/glm-4.6:
     id: z-ai/glm-4.6
     input: 0.35
-    output: 1.5
+    output: 1.71
     original_provider: z-ai
   glm-4.6:
     id: z-ai/glm-4.6
     input: 0.35
-    output: 1.5
+    output: 1.71
     original_provider: z-ai
   z-ai/glm-4.6:exacto:
     id: z-ai/glm-4.6:exacto
@@ -992,16 +992,6 @@ models:
     input: 0.85
     output: 1.25
     original_provider: relace
-  google/gemini-2.5-flash-preview-09-2025:
-    id: google/gemini-2.5-flash-preview-09-2025
-    input: 0.3
-    output: 2.5
-    original_provider: google
-  gemini-2.5-flash-preview-09-2025:
-    id: google/gemini-2.5-flash-preview-09-2025
-    input: 0.3
-    output: 2.5
-    original_provider: google
   google/gemini-2.5-flash-lite-preview-09-2025:
     id: google/gemini-2.5-flash-lite-preview-09-2025
     input: 0.1
@@ -1244,13 +1234,13 @@ models:
     original_provider: x-ai
   nousresearch/hermes-4-70b:
     id: nousresearch/hermes-4-70b
-    input: 0.11
-    output: 0.38
+    input: 0.13
+    output: 0.4
     original_provider: nousresearch
   hermes-4-70b:
     id: nousresearch/hermes-4-70b
-    input: 0.11
-    output: 0.38
+    input: 0.13
+    output: 0.4
     original_provider: nousresearch
   nousresearch/hermes-4-405b:
     id: nousresearch/hermes-4-405b
@@ -1454,23 +1444,23 @@ models:
     original_provider: qwen
   qwen/qwen3-30b-a3b-instruct-2507:
     id: qwen/qwen3-30b-a3b-instruct-2507
-    input: 0.08
-    output: 0.33
+    input: 0.09
+    output: 0.3
     original_provider: qwen
   qwen3-30b-a3b-instruct-2507:
     id: qwen/qwen3-30b-a3b-instruct-2507
-    input: 0.08
-    output: 0.33
+    input: 0.09
+    output: 0.3
     original_provider: qwen
   z-ai/glm-4.5:
     id: z-ai/glm-4.5
-    input: 0.35
-    output: 1.55
+    input: 0.55
+    output: 2
     original_provider: z-ai
   glm-4.5:
     id: z-ai/glm-4.5
-    input: 0.35
-    output: 1.55
+    input: 0.55
+    output: 2
     original_provider: z-ai
   z-ai/glm-4.5-air:free:
     id: z-ai/glm-4.5-air:free
@@ -1852,16 +1842,6 @@ models:
     input: 0.02
     output: 0.04
     original_provider: google
-  nousresearch/deephermes-3-mistral-24b-preview:
-    id: nousresearch/deephermes-3-mistral-24b-preview
-    input: 0.02
-    output: 0.1
-    original_provider: nousresearch
-  deephermes-3-mistral-24b-preview:
-    id: nousresearch/deephermes-3-mistral-24b-preview
-    input: 0.02
-    output: 0.1
-    original_provider: nousresearch
   mistralai/mistral-medium-3:
     id: mistralai/mistral-medium-3
     input: 0.4
@@ -1964,13 +1944,13 @@ models:
     original_provider: meta-llama
   qwen/qwen3-30b-a3b:
     id: qwen/qwen3-30b-a3b
-    input: 0.06
-    output: 0.22
+    input: 0.08
+    output: 0.28
     original_provider: qwen
   qwen3-30b-a3b:
     id: qwen/qwen3-30b-a3b
-    input: 0.06
-    output: 0.22
+    input: 0.08
+    output: 0.28
     original_provider: qwen
   qwen/qwen3-8b:
     id: qwen/qwen3-8b
@@ -1984,13 +1964,13 @@ models:
     original_provider: qwen
   qwen/qwen3-14b:
     id: qwen/qwen3-14b
-    input: 0.05
-    output: 0.22
+    input: 0.06
+    output: 0.24
     original_provider: qwen
   qwen3-14b:
     id: qwen/qwen3-14b
-    input: 0.05
-    output: 0.22
+    input: 0.06
+    output: 0.24
     original_provider: qwen
   qwen/qwen3-32b:
     id: qwen/qwen3-32b
@@ -2004,13 +1984,13 @@ models:
     original_provider: qwen
   qwen/qwen3-235b-a22b:
     id: qwen/qwen3-235b-a22b
-    input: 0.3
-    output: 1.2
+    input: 0.455
+    output: 1.82
     original_provider: qwen
   qwen3-235b-a22b:
     id: qwen/qwen3-235b-a22b
-    input: 0.3
-    output: 1.2
+    input: 0.455
+    output: 1.82
     original_provider: qwen
   tngtech/deepseek-r1t-chimera:
     id: tngtech/deepseek-r1t-chimera
@@ -2164,13 +2144,13 @@ models:
     original_provider: meta-llama
   qwen/qwen2.5-vl-32b-instruct:
     id: qwen/qwen2.5-vl-32b-instruct
-    input: 0.05
-    output: 0.22
+    input: 0.2
+    output: 0.6
     original_provider: qwen
   qwen2.5-vl-32b-instruct:
     id: qwen/qwen2.5-vl-32b-instruct
-    input: 0.05
-    output: 0.22
+    input: 0.2
+    output: 0.6
     original_provider: qwen
   deepseek/deepseek-chat-v3-0324:
     id: deepseek/deepseek-chat-v3-0324
@@ -2204,13 +2184,13 @@ models:
     original_provider: mistralai
   mistralai/mistral-small-3.1-24b-instruct:
     id: mistralai/mistral-small-3.1-24b-instruct
-    input: 0.03
-    output: 0.11
+    input: 0.35
+    output: 0.56
     original_provider: mistralai
   mistral-small-3.1-24b-instruct:
     id: mistralai/mistral-small-3.1-24b-instruct
-    input: 0.03
-    output: 0.11
+    input: 0.35
+    output: 0.56
     original_provider: mistralai
   allenai/olmo-2-0325-32b-instruct:
     id: allenai/olmo-2-0325-32b-instruct
@@ -2254,13 +2234,13 @@ models:
     original_provider: google
   google/gemma-3-12b-it:
     id: google/gemma-3-12b-it
-    input: 0.03
-    output: 0.1
+    input: 0.04
+    output: 0.13
     original_provider: google
   gemma-3-12b-it:
     id: google/gemma-3-12b-it
-    input: 0.03
-    output: 0.1
+    input: 0.04
+    output: 0.13
     original_provider: google
   cohere/command-a:
     id: cohere/command-a
@@ -2564,13 +2544,13 @@ models:
     original_provider: perplexity
   deepseek/deepseek-r1-distill-llama-70b:
     id: deepseek/deepseek-r1-distill-llama-70b
-    input: 0.03
-    output: 0.11
+    input: 0.7
+    output: 0.8
     original_provider: deepseek
   deepseek-r1-distill-llama-70b:
     id: deepseek/deepseek-r1-distill-llama-70b
-    input: 0.03
-    output: 0.11
+    input: 0.7
+    output: 0.8
     original_provider: deepseek
   deepseek/deepseek-r1:
     id: deepseek/deepseek-r1
@@ -2744,13 +2724,13 @@ models:
     original_provider: mistralai
   qwen/qwen-2.5-coder-32b-instruct:
     id: qwen/qwen-2.5-coder-32b-instruct
-    input: 0.03
-    output: 0.11
+    input: 0.2
+    output: 0.2
     original_provider: qwen
   qwen-2.5-coder-32b-instruct:
     id: qwen/qwen-2.5-coder-32b-instruct
-    input: 0.03
-    output: 0.11
+    input: 0.2
+    output: 0.2
     original_provider: qwen
   raifle/sorcererlm-8x22b:
     id: raifle/sorcererlm-8x22b
@@ -2822,16 +2802,6 @@ models:
     input: 1.2
     output: 1.2
     original_provider: nvidia
-  inflection/inflection-3-productivity:
-    id: inflection/inflection-3-productivity
-    input: 2.5
-    output: 10
-    original_provider: inflection
-  inflection-3-productivity:
-    id: inflection/inflection-3-productivity
-    input: 2.5
-    output: 10
-    original_provider: inflection
   inflection/inflection-3-pi:
     id: inflection/inflection-3-pi
     input: 2.5
@@ -2839,6 +2809,16 @@ models:
     original_provider: inflection
   inflection-3-pi:
     id: inflection/inflection-3-pi
+    input: 2.5
+    output: 10
+    original_provider: inflection
+  inflection/inflection-3-productivity:
+    id: inflection/inflection-3-productivity
+    input: 2.5
+    output: 10
+    original_provider: inflection
+  inflection-3-productivity:
+    id: inflection/inflection-3-productivity
     input: 2.5
     output: 10
     original_provider: inflection
@@ -2852,26 +2832,6 @@ models:
     input: 0.17
     output: 0.43
     original_provider: thedrummer
-  meta-llama/llama-3.2-1b-instruct:
-    id: meta-llama/llama-3.2-1b-instruct
-    input: 0.027
-    output: 0.2
-    original_provider: meta-llama
-  llama-3.2-1b-instruct:
-    id: meta-llama/llama-3.2-1b-instruct
-    input: 0.027
-    output: 0.2
-    original_provider: meta-llama
-  meta-llama/llama-3.2-11b-vision-instruct:
-    id: meta-llama/llama-3.2-11b-vision-instruct
-    input: 0.049
-    output: 0.049
-    original_provider: meta-llama
-  llama-3.2-11b-vision-instruct:
-    id: meta-llama/llama-3.2-11b-vision-instruct
-    input: 0.049
-    output: 0.049
-    original_provider: meta-llama
   meta-llama/llama-3.2-3b-instruct:free:
     id: meta-llama/llama-3.2-3b-instruct:free
     input: 0
@@ -2891,6 +2851,26 @@ models:
     id: meta-llama/llama-3.2-3b-instruct
     input: 0.02
     output: 0.02
+    original_provider: meta-llama
+  meta-llama/llama-3.2-1b-instruct:
+    id: meta-llama/llama-3.2-1b-instruct
+    input: 0.027
+    output: 0.2
+    original_provider: meta-llama
+  llama-3.2-1b-instruct:
+    id: meta-llama/llama-3.2-1b-instruct
+    input: 0.027
+    output: 0.2
+    original_provider: meta-llama
+  meta-llama/llama-3.2-11b-vision-instruct:
+    id: meta-llama/llama-3.2-11b-vision-instruct
+    input: 0.049
+    output: 0.049
+    original_provider: meta-llama
+  llama-3.2-11b-vision-instruct:
+    id: meta-llama/llama-3.2-11b-vision-instruct
+    input: 0.049
+    output: 0.049
     original_provider: meta-llama
   qwen/qwen-2.5-72b-instruct:
     id: qwen/qwen-2.5-72b-instruct
@@ -2982,16 +2962,6 @@ models:
     input: 1
     output: 1
     original_provider: nousresearch
-  openai/chatgpt-4o-latest:
-    id: openai/chatgpt-4o-latest
-    input: 5
-    output: 15
-    original_provider: openai
-  chatgpt-4o-latest:
-    id: openai/chatgpt-4o-latest
-    input: 5
-    output: 15
-    original_provider: openai
   sao10k/l3-lunaris-8b:
     id: sao10k/l3-lunaris-8b
     input: 0.04
@@ -3022,15 +2992,15 @@ models:
     input: 4
     output: 4
     original_provider: meta-llama
-  meta-llama/llama-3.1-70b-instruct:
-    id: meta-llama/llama-3.1-70b-instruct
-    input: 0.4
-    output: 0.4
+  meta-llama/llama-3.1-8b-instruct:
+    id: meta-llama/llama-3.1-8b-instruct
+    input: 0.02
+    output: 0.05
     original_provider: meta-llama
-  llama-3.1-70b-instruct:
-    id: meta-llama/llama-3.1-70b-instruct
-    input: 0.4
-    output: 0.4
+  llama-3.1-8b-instruct:
+    id: meta-llama/llama-3.1-8b-instruct
+    input: 0.02
+    output: 0.05
     original_provider: meta-llama
   meta-llama/llama-3.1-405b-instruct:
     id: meta-llama/llama-3.1-405b-instruct
@@ -3042,15 +3012,15 @@ models:
     input: 4
     output: 4
     original_provider: meta-llama
-  meta-llama/llama-3.1-8b-instruct:
-    id: meta-llama/llama-3.1-8b-instruct
-    input: 0.02
-    output: 0.05
+  meta-llama/llama-3.1-70b-instruct:
+    id: meta-llama/llama-3.1-70b-instruct
+    input: 0.4
+    output: 0.4
     original_provider: meta-llama
-  llama-3.1-8b-instruct:
-    id: meta-llama/llama-3.1-8b-instruct
-    input: 0.02
-    output: 0.05
+  llama-3.1-70b-instruct:
+    id: meta-llama/llama-3.1-70b-instruct
+    input: 0.4
+    output: 0.4
     original_provider: meta-llama
   mistralai/mistral-nemo:
     id: mistralai/mistral-nemo
@@ -3392,15 +3362,15 @@ models:
     input: 0.06
     output: 0.06
     original_provider: gryphe
-  openai/gpt-3.5-turbo:
-    id: openai/gpt-3.5-turbo
-    input: 0.5
-    output: 1.5
+  openai/gpt-4-0314:
+    id: openai/gpt-4-0314
+    input: 30
+    output: 60
     original_provider: openai
-  gpt-3.5-turbo:
-    id: openai/gpt-3.5-turbo
-    input: 0.5
-    output: 1.5
+  gpt-4-0314:
+    id: openai/gpt-4-0314
+    input: 30
+    output: 60
     original_provider: openai
   openai/gpt-4:
     id: openai/gpt-4
@@ -3412,18 +3382,18 @@ models:
     input: 30
     output: 60
     original_provider: openai
-  openai/gpt-4-0314:
-    id: openai/gpt-4-0314
-    input: 30
-    output: 60
+  openai/gpt-3.5-turbo:
+    id: openai/gpt-3.5-turbo
+    input: 0.5
+    output: 1.5
     original_provider: openai
-  gpt-4-0314:
-    id: openai/gpt-4-0314
-    input: 30
-    output: 60
+  gpt-3.5-turbo:
+    id: openai/gpt-3.5-turbo
+    input: 0.5
+    output: 1.5
     original_provider: openai
 metadata:
-  last_updated: '2026-02-16'
+  last_updated: '2026-02-18'
   source: https://openrouter.ai/api/v1/models
   notes: Auto-refreshed from OpenRouter models API
   version: auto
