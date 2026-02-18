@@ -156,40 +156,50 @@ export default function MemoryVaultPage() {
   const filteredMemories = useMemo(() => {
     if (!data?.recent) return [];
     return data.recent.filter((item) => {
-      // Exclude semantic memories - they're better visualized in the Knowledge Graph tab
-      if (item.sector === 'semantic') return false;
+      // Exclude semantic memories (visualized in Knowledge Graph tab) and reflective memories (disabled)
+      if (item.sector === 'semantic' || item.sector === 'reflective') return false;
       const matchesSearch = !searchTerm || item.preview.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesSector = filterSector === 'all' || item.sector === filterSector;
       return matchesSearch && matchesSector;
     });
   }, [data, searchTerm, filterSector]);
 
+  // Filter out reflective memories from display data
+  const displayData = useMemo(() => {
+    if (!data) return null;
+    return {
+      ...data,
+      summary: data.summary.filter(s => s.sector !== 'reflective'),
+      recent: data.recent?.filter(r => r.sector !== 'reflective'),
+    };
+  }, [data]);
+
   // Calculate quick stats
   const quickStats = useMemo(() => {
-    if (!data) return null;
-    const total = data.summary.reduce((sum, s) => sum + s.count, 0);
-    const totalRetrievals = data.recent?.reduce((sum, r) => sum + (r.retrievalCount ?? 0), 0) ?? 0;
-    const mostRecent = data.recent?.[0]?.createdAt;
-    const oldest = data.recent?.[data.recent.length - 1]?.createdAt;
+    if (!displayData) return null;
+    const total = displayData.summary.reduce((sum, s) => sum + s.count, 0);
+    const totalRetrievals = displayData.recent?.reduce((sum, r) => sum + (r.retrievalCount ?? 0), 0) ?? 0;
+    const mostRecent = displayData.recent?.[0]?.createdAt;
+    const oldest = displayData.recent?.[displayData.recent.length - 1]?.createdAt;
     
     return {
       total,
       totalRetrievals,
-      avgRetrievals: data.recent?.length ? Math.round(totalRetrievals / data.recent.length) : 0,
+      avgRetrievals: displayData.recent?.length ? Math.round(totalRetrievals / displayData.recent.length) : 0,
       mostRecent,
       oldest,
     };
-  }, [data]);
+  }, [displayData]);
 
   // Calculate sector counts for ProfileStats
   const sectorCounts = useMemo(() => {
-    if (!data) return { episodic: 0, procedural: 0, semantic: 0 };
+    if (!displayData) return { episodic: 0, procedural: 0, semantic: 0 };
     return {
-      episodic: data.summary.find(s => s.sector === 'episodic')?.count ?? 0,
-      procedural: data.summary.find(s => s.sector === 'procedural')?.count ?? 0,
-      semantic: data.summary.find(s => s.sector === 'semantic')?.count ?? 0,
+      episodic: displayData.summary.find(s => s.sector === 'episodic')?.count ?? 0,
+      procedural: displayData.summary.find(s => s.sector === 'procedural')?.count ?? 0,
+      semantic: displayData.summary.find(s => s.sector === 'semantic')?.count ?? 0,
     };
-  }, [data]);
+  }, [displayData]);
 
 
   return (
@@ -323,10 +333,10 @@ export default function MemoryVaultPage() {
             />
             
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <BrainComposition data={data} quickStats={quickStats} />
-              <ActivityDistribution data={data} quickStats={quickStats} />
+              <BrainComposition data={displayData} quickStats={quickStats} />
+              <ActivityDistribution data={displayData} quickStats={quickStats} />
             </div>
-            <MemoryStrength data={data} />
+            <MemoryStrength data={displayData} />
           </div>
         ) : activeTab === 'graph' ? (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
