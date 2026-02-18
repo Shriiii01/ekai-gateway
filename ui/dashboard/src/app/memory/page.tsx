@@ -35,6 +35,7 @@ export default function MemoryVaultPage() {
   const [editModal, setEditModal] = useState<{ id: string; content: string; sector: string } | null>(null);
   const [editBusy, setEditBusy] = useState(false);
   const [currentProfile, setCurrentProfile] = useState('default');
+  const [profileResolved, setProfileResolved] = useState(false);
   const [showProfileManagement, setShowProfileManagement] = useState(false);
   const [profileSwitching, setProfileSwitching] = useState(false);
   const [embedded, setEmbedded] = useState(false);
@@ -46,7 +47,19 @@ export default function MemoryVaultPage() {
     );
   }, []);
 
+  // On mount, pick the first non-default agent profile (or fall back to 'default')
+  useEffect(() => {
+    apiService.getProfiles().then(({ profiles }) => {
+      const agent = profiles.find(p => p !== 'default');
+      if (agent) setCurrentProfile(agent);
+      setProfileResolved(true);
+    }).catch(() => {
+      setProfileResolved(true);
+    });
+  }, []);
+
   const fetchData = useCallback(async () => {
+    if (!profileResolved) return;
     try {
       setLoading(true);
       setError(null);
@@ -58,7 +71,7 @@ export default function MemoryVaultPage() {
     } finally {
       setLoading(false);
     }
-  }, [currentProfile]);
+  }, [currentProfile, profileResolved]);
 
   useEffect(() => {
     fetchData();
@@ -201,6 +214,14 @@ export default function MemoryVaultPage() {
     };
   }, [displayData]);
 
+  // Wait for profile resolution before rendering
+  if (!profileResolved) {
+    return (
+      <div className="min-h-screen font-sans text-slate-800 flex items-center justify-center" style={{ backgroundColor: '#FFFCEC' }}>
+        <div className="text-stone-400 text-sm">Loading profiles...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen font-sans text-slate-800" style={{ backgroundColor: '#FFFCEC' }}>
