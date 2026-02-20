@@ -32,14 +32,13 @@ export function initMemoryStore(s: SqliteMemoryStore): void {
 export async function fetchMemoryContext(
   query: string,
   profile: string,
-  userId?: string,
 ): Promise<QueryResult[] | null> {
   if (!store) {
     console.warn('[memory] store not initialized');
     return null;
   }
   try {
-    const data = await store.query(query, profile, userId);
+    const data = await store.query(query, profile);
     return data.workingMemory?.length ? data.workingMemory : null;
   } catch (err: any) {
     console.warn(`[memory] search failed: ${err.message}`);
