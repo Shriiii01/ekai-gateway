@@ -129,6 +129,7 @@ export interface GraphTraversalOptions {
   includeInvalidated?: boolean;
   predicateFilter?: string;
   profile?: string;
+  userId?: string;
 }
 
 export interface GraphPath {

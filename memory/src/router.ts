@@ -310,7 +310,7 @@ export function createMemoryRouter(store: SqliteMemoryStore): Router {
   // Graph traversal endpoints
   router.get('/v1/graph/triples', (req: Request, res: Response) => {
     try {
-      const { entity, direction, maxResults, predicate, profile } = req.query;
+      const { entity, direction, maxResults, predicate, profile, userId } = req.query;
       if (!entity || typeof entity !== 'string') {
         return res.status(400).json({ error: 'entity query parameter is required' });
       }
@@ -319,6 +319,7 @@ export function createMemoryRouter(store: SqliteMemoryStore): Router {
         maxResults: maxResults ? Number(maxResults) : 100,
         predicateFilter: predicate as string | undefined,
         profile: profile as string,
+        userId: userId as string | undefined,
       };
 
       let triples;
@@ -341,12 +342,12 @@ export function createMemoryRouter(store: SqliteMemoryStore): Router {
 
   router.get('/v1/graph/neighbors', (req: Request, res: Response) => {
     try {
-      const { entity, profile } = req.query;
+      const { entity, profile, userId } = req.query;
       if (!entity || typeof entity !== 'string') {
         return res.status(400).json({ error: 'entity query parameter is required' });
       }
 
-      const neighbors = Array.from(store.graph.findNeighbors(entity, { profile: profile as string }));
+      const neighbors = Array.from(store.graph.findNeighbors(entity, { profile: profile as string, userId: userId as string | undefined }));
       res.json({ entity, neighbors, count: neighbors.length });
     } catch (err: any) {
       if (err?.message === 'invalid_profile') {
@@ -358,7 +359,7 @@ export function createMemoryRouter(store: SqliteMemoryStore): Router {
 
   router.get('/v1/graph/paths', (req: Request, res: Response) => {
     try {
-      const { from, to, maxDepth, profile } = req.query;
+      const { from, to, maxDepth, profile, userId } = req.query;
       if (!from || typeof from !== 'string' || !to || typeof to !== 'string') {
         return res.status(400).json({ error: 'from and to query parameters are required' });
       }
@@ -366,6 +367,7 @@ export function createMemoryRouter(store: SqliteMemoryStore): Router {
       const paths = store.graph.findPaths(from, to, {
         maxDepth: maxDepth ? Number(maxDepth) : 3,
         profile: profile as string,
+        userId: userId as string | undefined,
       });
 
       res.json({ from, to, paths, count: paths.length });
@@ -379,7 +381,7 @@ export function createMemoryRouter(store: SqliteMemoryStore): Router {
 
   router.get('/v1/graph/visualization', (req: Request, res: Response) => {
     try {
-      const { entity, maxDepth, maxNodes, profile, includeHistory } = req.query;
+      const { entity, maxDepth, maxNodes, profile, includeHistory, userId } = req.query;
       const profileValue = profile as string;
       const normalizedProfile = normalizeProfileSlug(profileValue);
       const centerEntity = (entity as string) || null;
@@ -419,13 +421,13 @@ export function createMemoryRouter(store: SqliteMemoryStore): Router {
       }
 
       // Build graph from center entity
-      const graphOptions = { maxDepth: depth, profile: normalizedProfile, includeInvalidated: showHistory };
+      const graphOptions = { maxDepth: depth, profile: normalizedProfile, includeInvalidated: showHistory, userId: userId as string | undefined };
       const reachable = store.graph.findReachableEntities(centerEntity, graphOptions);
       const nodes = new Set<string>([centerEntity]);
       const edges: Array<{ source: string; target: string; predicate: string; isHistorical?: boolean }> = [];
 
       // Add center entity's connections
-      const centerTriples = store.graph.findConnectedTriples(centerEntity, { maxResults: 100, profile: normalizedProfile, includeInvalidated: showHistory });
+      const centerTriples = store.graph.findConnectedTriples(centerEntity, { maxResults: 100, profile: normalizedProfile, includeInvalidated: showHistory, userId: userId as string | undefined });
       for (const triple of centerTriples) {
         nodes.add(triple.subject);
         nodes.add(triple.object);
@@ -443,7 +445,7 @@ export function createMemoryRouter(store: SqliteMemoryStore): Router {
         .slice(0, nodeLimit - nodes.size);
 
       for (const [entity, _depth] of reachableArray) {
-        const entityTriples = store.graph.findTriplesBySubject(entity, { maxResults: 10, profile: normalizedProfile, includeInvalidated: showHistory });
+        const entityTriples = store.graph.findTriplesBySubject(entity, { maxResults: 10, profile: normalizedProfile, includeInvalidated: showHistory, userId: userId as string | undefined });
         for (const triple of entityTriples) {
           if (nodes.has(triple.subject) || nodes.has(triple.object)) {
             nodes.add(triple.subject);

@@ -22,28 +22,35 @@ export class SemanticGraphTraversal {
     subject: string,
     options: GraphTraversalOptions & { profile?: string } = {},
   ): SemanticMemoryRecord[] {
-    const { maxResults = 100, includeInvalidated = false, predicateFilter } = options;
+    const { maxResults = 100, includeInvalidated = false, predicateFilter, userId } = options;
     const profileId = normalizeProfileSlug(options.profile);
     const now = this.now();
-    
+
     let query = `select id, subject, predicate, object, valid_from as validFrom, valid_to as validTo,
                   created_at as createdAt, updated_at as updatedAt, embedding, metadata, profile_id as profileId
            from semantic_memory
            where subject = @subject and profile_id = @profileId`;
-    
+
     if (!includeInvalidated) {
       query += ` and (valid_to is null or valid_to > @now)`;
     }
-    
+
     if (predicateFilter) {
       query += ` and predicate = @predicateFilter`;
     }
-    
+
+    if (userId) {
+      query += ` and (user_scope is null or user_scope = @userId)`;
+    }
+
     query += ` order by updated_at desc limit @maxResults`;
 
     const params: Record<string, any> = { subject, now, maxResults, profileId };
     if (predicateFilter) {
       params.predicateFilter = predicateFilter;
+    }
+    if (userId) {
+      params.userId = userId;
     }
     
     const rows = this.db
@@ -64,28 +71,35 @@ export class SemanticGraphTraversal {
     object: string,
     options: GraphTraversalOptions & { profile?: string } = {},
   ): SemanticMemoryRecord[] {
-    const { maxResults = 100, includeInvalidated = false, predicateFilter } = options;
+    const { maxResults = 100, includeInvalidated = false, predicateFilter, userId } = options;
     const profileId = normalizeProfileSlug(options.profile);
     const now = this.now();
-    
+
     let query = `select id, subject, predicate, object, valid_from as validFrom, valid_to as validTo,
                   created_at as createdAt, updated_at as updatedAt, embedding, metadata, profile_id as profileId
            from semantic_memory
            where object = @object and profile_id = @profileId`;
-    
+
     if (!includeInvalidated) {
       query += ` and (valid_to is null or valid_to > @now)`;
     }
-    
+
     if (predicateFilter) {
       query += ` and predicate = @predicateFilter`;
     }
-    
+
+    if (userId) {
+      query += ` and (user_scope is null or user_scope = @userId)`;
+    }
+
     query += ` order by updated_at desc limit @maxResults`;
 
     const params: Record<string, any> = { object, now, maxResults, profileId };
     if (predicateFilter) {
       params.predicateFilter = predicateFilter;
+    }
+    if (userId) {
+      params.userId = userId;
     }
     
     const rows = this.db
