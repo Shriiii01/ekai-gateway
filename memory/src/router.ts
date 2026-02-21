@@ -144,6 +144,7 @@ export function createMemoryRouter(store: SqliteMemoryStore): Router {
         preview: r.content,
         retrievalCount: (r as any).retrievalCount ?? 0,
         details: (r as any).details,
+        userScope: (r as any).userScope ?? null,
       }));
       res.json({ summary, recent, profile: normalizedProfile });
     } catch (err: any) {

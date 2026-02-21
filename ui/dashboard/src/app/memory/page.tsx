@@ -14,6 +14,7 @@ import { ActivityDistribution } from '@/components/memory/ActivityDistribution';
 import { MemoryStrength } from '@/components/memory/MemoryStrength';
 import { SemanticGraph } from '@/components/memory/SemanticGraph';
 import ProfileSelector from '@/components/memory/ProfileSelector';
+import UserFilter from '@/components/memory/UserFilter';
 import ProfileManagement from '@/components/memory/ProfileManagement';
 import ProfileStats from '@/components/memory/ProfileStats';
 import ProfileBadge from '@/components/memory/ProfileBadge';
@@ -35,6 +36,7 @@ export default function MemoryVaultPage() {
   const [editModal, setEditModal] = useState<{ id: string; content: string; sector: string } | null>(null);
   const [editBusy, setEditBusy] = useState(false);
   const [currentProfile, setCurrentProfile] = useState('default');
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [profileResolved, setProfileResolved] = useState(false);
   const [showProfileManagement, setShowProfileManagement] = useState(false);
   const [profileSwitching, setProfileSwitching] = useState(false);
@@ -80,6 +82,7 @@ export default function MemoryVaultPage() {
   const handleProfileChange = (profileSlug: string) => {
     setProfileSwitching(true);
     setCurrentProfile(profileSlug);
+    setSelectedUserId(null);
     setSearchTerm('');
     setFilterSector('all');
     setExpandedId(null);
@@ -173,19 +176,34 @@ export default function MemoryVaultPage() {
       if (item.sector === 'semantic' || item.sector === 'reflective') return false;
       const matchesSearch = !searchTerm || item.preview.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesSector = filterSector === 'all' || item.sector === filterSector;
-      return matchesSearch && matchesSector;
+      const matchesUser = !selectedUserId || item.userScope == null || item.userScope === selectedUserId;
+      return matchesSearch && matchesSector && matchesUser;
     });
-  }, [data, searchTerm, filterSector]);
+  }, [data, searchTerm, filterSector, selectedUserId]);
 
-  // Filter out reflective memories from display data
+  // Filter out reflective memories from display data, and apply user scope filter
   const displayData = useMemo(() => {
     if (!data) return null;
+    const filtered = data.recent?.filter(r => {
+      if (r.sector === 'reflective') return false;
+      if (selectedUserId && r.userScope != null && r.userScope !== selectedUserId) return false;
+      return true;
+    });
+    // Recompute summary counts from filtered recent items when user filter is active
+    const summary = selectedUserId
+      ? data.summary
+          .filter(s => s.sector !== 'reflective')
+          .map(s => ({
+            ...s,
+            count: filtered?.filter(r => r.sector === s.sector).length ?? 0,
+          }))
+      : data.summary.filter(s => s.sector !== 'reflective');
     return {
       ...data,
-      summary: data.summary.filter(s => s.sector !== 'reflective'),
-      recent: data.recent?.filter(r => r.sector !== 'reflective'),
+      summary,
+      recent: filtered,
     };
-  }, [data]);
+  }, [data, selectedUserId]);
 
   // Calculate quick stats
   const quickStats = useMemo(() => {
@@ -252,6 +270,11 @@ export default function MemoryVaultPage() {
                 currentProfile={currentProfile}
                 onProfileChange={handleProfileChange}
                 onManageProfiles={() => setShowProfileManagement(true)}
+              />
+              <UserFilter
+                currentProfile={currentProfile}
+                selectedUserId={selectedUserId}
+                onUserChange={setSelectedUserId}
               />
               <button
                 onClick={fetchData}
@@ -361,7 +384,7 @@ export default function MemoryVaultPage() {
           </div>
         ) : activeTab === 'graph' ? (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <SemanticGraph maxDepth={2} maxNodes={50} height={600} profile={currentProfile} />
+            <SemanticGraph maxDepth={2} maxNodes={50} height={600} profile={currentProfile} userId={selectedUserId} />
           </div>
         ) : (
           <div className="bg-gradient-to-br from-white via-stone-50/20 to-white rounded-2xl border border-stone-200 shadow-lg animate-in fade-in slide-in-from-bottom-4 duration-500 overflow-hidden">
@@ -470,16 +493,27 @@ export default function MemoryVaultPage() {
                           )}
                           
                           <td className="px-6 py-5 whitespace-nowrap align-top">
-                            <SectorTooltip sector={item.sector}>
-                              <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-[11px] font-bold border shadow-sm transition-all group-hover:scale-105 cursor-help ${
-                                isActive ? 'ring-2 ring-teal-200' : ''
-                              } ${sectorColors[item.sector]}`}>
-                                {capitalizeSector(item.sector)}
-                                {isRecent && (
-                                  <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                                )}
-                              </span>
-                            </SectorTooltip>
+                            <div className="flex flex-col gap-1.5">
+                              <SectorTooltip sector={item.sector}>
+                                <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-[11px] font-bold border shadow-sm transition-all group-hover:scale-105 cursor-help ${
+                                  isActive ? 'ring-2 ring-teal-200' : ''
+                                } ${sectorColors[item.sector]}`}>
+                                  {capitalizeSector(item.sector)}
+                                  {isRecent && (
+                                    <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                  )}
+                                </span>
+                              </SectorTooltip>
+                              {item.userScope ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200 w-fit" title={`Scoped to user: ${item.userScope}`}>
+                                  @ {item.userScope.length > 12 ? item.userScope.slice(0, 12) + '...' : item.userScope}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-stone-50 text-stone-400 border border-stone-100 w-fit">
+                                  shared
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-6 py-5 align-top">
                             <div className={`text-sm text-slate-700 leading-relaxed transition-all ${expandedId === item.id ? '' : 'line-clamp-2 font-medium'}`}>

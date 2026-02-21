@@ -115,8 +115,8 @@ describe('SqliteMemoryStore (single-user mode)', () => {
     expect(result).toHaveProperty('profileId');
     expect(Array.isArray(result.workingMemory)).toBe(true);
 
-    // perSector has all 4 sector keys
-    for (const sector of ['episodic', 'semantic', 'procedural', 'reflective'] as SectorName[]) {
+    // perSector has all 3 active sector keys (reflective is disabled)
+    for (const sector of ['episodic', 'semantic', 'procedural'] as SectorName[]) {
       expect(result.perSector).toHaveProperty(sector);
       expect(Array.isArray(result.perSector[sector])).toBe(true);
     }

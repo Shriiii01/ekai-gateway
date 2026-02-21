@@ -357,19 +357,19 @@ export class SqliteMemoryStore {
     this.ensureProfileExists(profileId);
     const rows = this.db
       .prepare(
-        `select id, sector, content, embedding, created_at as createdAt, last_accessed as lastAccessed, '{}' as details, event_start as eventStart, event_end as eventEnd, retrieval_count as retrievalCount
+        `select id, sector, content, embedding, created_at as createdAt, last_accessed as lastAccessed, '{}' as details, event_start as eventStart, event_end as eventEnd, retrieval_count as retrievalCount, user_scope as userScope
          from memory
          where profile_id = @profileId
          union all
          select id, 'procedural' as sector, trigger as content, embedding, created_at as createdAt, last_accessed as lastAccessed,
                 json_object('trigger', trigger, 'goal', goal, 'context', context, 'result', result, 'steps', json(steps)) as details,
-                null as eventStart, null as eventEnd, 0 as retrievalCount
+                null as eventStart, null as eventEnd, 0 as retrievalCount, user_scope as userScope
          from procedural_memory
          where profile_id = @profileId
          union all
          select id, 'semantic' as sector, object as content, json('[]') as embedding, created_at as createdAt, updated_at as lastAccessed,
                 json_object('subject', subject, 'predicate', predicate, 'object', object, 'validFrom', valid_from, 'validTo', valid_to, 'strength', strength, 'metadata', metadata, 'domain', domain) as details,
-                null as eventStart, null as eventEnd, 0 as retrievalCount
+                null as eventStart, null as eventEnd, 0 as retrievalCount, user_scope as userScope
          from semantic_memory
          where profile_id = @profileId
            and (valid_to is null or valid_to > @now)

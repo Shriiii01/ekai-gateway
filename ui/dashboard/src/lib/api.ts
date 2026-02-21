@@ -15,12 +15,14 @@ export interface MemoryRecentItem {
   lastAccessed: number;
   preview: string;
   retrievalCount?: number;
+  userScope?: string | null;
   details?: {
     trigger?: string;
     goal?: string;
     context?: string;
     result?: string;
     steps?: string[];
+    domain?: string;
   };
 }
 
@@ -97,7 +99,7 @@ export const apiService = {
   },
 
   // Graph traversal APIs
-  async getGraphVisualization(params?: { entity?: string; maxDepth?: number; maxNodes?: number; profile?: string; includeHistory?: boolean }): Promise<{
+  async getGraphVisualization(params?: { entity?: string; maxDepth?: number; maxNodes?: number; profile?: string; includeHistory?: boolean; userId?: string }): Promise<{
     center?: string;
     nodes: Array<{ id: string; label: string }>;
     edges: Array<{ source: string; target: string; predicate: string; isHistorical?: boolean }>;
@@ -109,6 +111,7 @@ export const apiService = {
     if (params?.maxNodes) searchParams.append('maxNodes', String(params.maxNodes));
     if (params?.profile) searchParams.append('profile', params.profile);
     if (params?.includeHistory) searchParams.append('includeHistory', 'true');
+    if (params?.userId) searchParams.append('userId', params.userId);
 
     const url = `${MEMORY_BASE_URL}/v1/graph/visualization${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
     const response = await fetch(url);
@@ -174,6 +177,14 @@ export const apiService = {
     const response = await fetch(`${MEMORY_BASE_URL}/v1/profiles`);
     if (!response.ok) {
       throw new Error(`Failed to fetch profiles: ${response.statusText}`);
+    }
+    return response.json();
+  },
+
+  async getUsers(profile: string): Promise<{ users: Array<{ userId: string; firstSeen: number; lastSeen: number; interactionCount: number }>; profile: string }> {
+    const response = await fetch(`${MEMORY_BASE_URL}/v1/users?profile=${encodeURIComponent(profile)}`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch users: ${response.statusText}`);
     }
     return response.json();
   },
