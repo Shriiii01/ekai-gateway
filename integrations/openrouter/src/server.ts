@@ -21,16 +21,16 @@ app.use(express.json({ limit: '10mb' }));
 
 // Initialize embedded memory with explicit provider config
 const agentId = process.env.MEMORY_AGENT ?? 'default';
-const memory = new Memory({
+const mem = new Memory({
   provider: 'openrouter',
   apiKey: OPENROUTER_API_KEY,
   dbPath: MEMORY_DB_PATH,
-  agent: agentId,
 });
+const memory = mem.agent(agentId);
 initMemory(memory);
 
 // Mount memory admin routes (dashboard, graph, etc.)
-app.use(createMemoryRouter(memory._store, memory._extractFn));
+app.use(createMemoryRouter(mem._store, mem._extractFn));
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });

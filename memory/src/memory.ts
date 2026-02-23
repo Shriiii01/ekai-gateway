@@ -14,7 +14,6 @@ export interface MemoryConfig {
   provider?: ProviderName;
   apiKey?: string;
   dbPath?: string;
-  agent?: string;        // scopes all data ops; omit for management-only
   embedModel?: string;
   extractModel?: string;
 }
@@ -25,8 +24,6 @@ export class Memory {
   private agentId: string | undefined;
 
   constructor(config?: MemoryConfig) {
-    this.agentId = config?.agent;
-
     // Build embed/extract functions: use explicit provider config if given, else fall back to env-based
     const embedFn = (config?.provider && config?.apiKey)
       ? createEmbedFn({ provider: config.provider, apiKey: config.apiKey, embedModel: config.embedModel })
@@ -42,8 +39,18 @@ export class Memory {
     });
   }
 
+  /** Create an internal Memory sharing this store, scoped to an agent. */
+  private static _scoped(store: SqliteMemoryStore, extractFn: ExtractFn, agentId: string): Memory {
+    const m = Object.create(Memory.prototype) as Memory;
+    m.store = store;
+    m.extractFn = extractFn;
+    m.agentId = agentId;
+    return m;
+  }
+
   // --- Management (always available) ---
 
+  /** Register an agent. `soul` is optional agent-level context/personality. */
   addAgent(id: string, opts?: { name?: string; soul?: string }): AgentInfo {
     return this.store.addAgent(id, { name: opts?.name, soulMd: opts?.soul });
   }
@@ -52,11 +59,16 @@ export class Memory {
     return this.store.getAgents();
   }
 
+  /** Return an agent-scoped instance sharing the same store. */
+  agent(id: string): Memory {
+    return Memory._scoped(this.store, this.extractFn, id);
+  }
+
   // --- Data ops (require agent scope) ---
 
   private requireAgent(): string {
     if (!this.agentId) {
-      throw new Error('agent_scope_required: create Memory with { agent: "..." } for data ops');
+      throw new Error('agent_scope_required: use mem.agent("id") for data ops');
     }
     return this.agentId;
   }

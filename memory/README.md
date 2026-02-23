@@ -18,12 +18,14 @@ See [Usage Modes](#usage-modes) below for SDK, mountable router, and standalone 
 ```ts
 import { Memory } from '@ekai/memory';
 
-// Setup — provider config is explicit, no env vars needed
+// Provider config is global — shared across all agents
 const mem = new Memory({ provider: 'openai', apiKey: 'sk-...' });
+
+// Register an agent (soul is optional)
 mem.addAgent('my-bot', { name: 'My Bot', soul: 'You are helpful' });
 
-// Scoped instance — all data ops are agent-scoped
-const bot = new Memory({ provider: 'openai', apiKey: 'sk-...', agent: 'my-bot' });
+// Get a scoped instance — all data ops go through this
+const bot = mem.agent('my-bot');
 await bot.add(messages, { userId: 'alice' });
 await bot.search('preferences', { userId: 'alice' });
 bot.users();                            // agent's known users
@@ -52,22 +54,21 @@ bot.delete(id);
 ```ts
 import { Memory } from '@ekai/memory';
 
-const mem = new Memory({
-  provider: 'openai',
-  apiKey: 'sk-...',
-  agent: 'my-bot',
-});
+// Provider config is global
+const mem = new Memory({ provider: 'openai', apiKey: 'sk-...' });
 
-// Management (no agent scope needed)
+// Register agents (soul is optional)
 mem.addAgent('my-bot', { name: 'My Bot', soul: 'You are helpful' });
+mem.addAgent('support-bot', { name: 'Support Bot' });
 mem.getAgents();
 
-// Data ops (require agent scope)
-await mem.add(messages, { userId: 'alice' });
-await mem.search('query', { userId: 'alice' });
-mem.users();
-mem.memories({ userId: 'alice' });
-mem.delete(id);
+// Scope to an agent for data ops
+const bot = mem.agent('my-bot');
+await bot.add(messages, { userId: 'alice' });
+await bot.search('query', { userId: 'alice' });
+bot.users();
+bot.memories({ userId: 'alice' });
+bot.delete(id);
 ```
 
 ### 2. Mountable router
