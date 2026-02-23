@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import type { SqliteMemoryStore } from './sqlite-store.js';
-import { extract } from './providers/extract.js';
-import { normalizeProfileSlug } from './utils.js';
+import type { ExtractFn } from './types.js';
+import { extract as defaultExtract } from './providers/extract.js';
+import { normalizeAgentId } from './utils.js';
 import type { IngestComponents } from './types.js';
 import { ingestDocuments } from './documents.js';
 
@@ -10,51 +11,52 @@ import { ingestDocuments } from './documents.js';
  * Creates an Express Router with all memory API routes.
  * The store is received via closure — no global state needed.
  */
-export function createMemoryRouter(store: SqliteMemoryStore): Router {
+export function createMemoryRouter(store: SqliteMemoryStore, extractFn?: ExtractFn): Router {
   const router = Router();
+  const doExtract = extractFn ?? defaultExtract;
 
-  router.get('/v1/profiles', (_req: Request, res: Response) => {
+  router.get('/v1/agents', (_req: Request, res: Response) => {
     try {
-      const profiles = store.getAvailableProfiles();
-      res.json({ profiles });
+      const agents = store.getAgents();
+      res.json({ agents });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? 'failed to fetch profiles' });
+      res.status(500).json({ error: err.message ?? 'failed to fetch agents' });
     }
   });
 
-  const handleDeleteProfile = (req: Request, res: Response) => {
+  const handleDeleteAgent = (req: Request, res: Response) => {
     try {
       const { slug } = req.params;
-      const normalizedProfile = normalizeProfileSlug(slug);
-      const deleted = store.deleteProfile(normalizedProfile);
-      res.json({ deleted, profile: normalizedProfile });
+      const normalizedAgent = normalizeAgentId(slug);
+      const deleted = store.deleteAgent(normalizedAgent);
+      res.json({ deleted, agent: normalizedAgent });
     } catch (err: any) {
-      if (err?.message === 'invalid_profile') {
-        return res.status(400).json({ error: 'invalid_profile' });
+      if (err?.message === 'invalid_agent') {
+        return res.status(400).json({ error: 'invalid_agent' });
       }
-      if (err?.message === 'cannot_delete_default_profile') {
-        return res.status(400).json({ error: 'default_profile_protected' });
+      if (err?.message === 'cannot_delete_default_agent') {
+        return res.status(400).json({ error: 'default_agent_protected' });
       }
-      res.status(500).json({ error: err.message ?? 'delete profile failed' });
+      res.status(500).json({ error: err.message ?? 'delete agent failed' });
     }
   };
-  router.delete('/v1/profiles/:slug', handleDeleteProfile);
+  router.delete('/v1/agents/:slug', handleDeleteAgent);
 
   router.post('/v1/ingest', async (req: Request, res: Response) => {
-    const { messages, profile, userId } = req.body as {
+    const { messages, agent, userId } = req.body as {
       messages?: Array<{ role: 'user' | 'assistant' | string; content: string }>;
-      profile?: string;
+      agent?: string;
       userId?: string;
     };
 
-    let normalizedProfile: string;
+    let normalizedAgent: string;
     try {
-      normalizedProfile = normalizeProfileSlug(profile);
+      normalizedAgent = normalizeAgentId(agent);
     } catch (err: any) {
-      if (err?.message === 'invalid_profile') {
-        return res.status(400).json({ error: 'invalid_profile' });
+      if (err?.message === 'invalid_agent') {
+        return res.status(400).json({ error: 'invalid_agent' });
       }
-      return res.status(500).json({ error: 'profile_normalization_failed' });
+      return res.status(500).json({ error: 'agent_normalization_failed' });
     }
 
     if (!messages || !messages.length) {
@@ -74,7 +76,7 @@ export function createMemoryRouter(store: SqliteMemoryStore): Router {
     let finalComponents: IngestComponents | undefined;
 
     try {
-      finalComponents = await extract(sourceText);
+      finalComponents = await doExtract(sourceText);
     } catch (err: any) {
       return res.status(500).json({ error: err.message ?? 'extraction failed' });
     }
@@ -83,34 +85,34 @@ export function createMemoryRouter(store: SqliteMemoryStore): Router {
       return res.status(400).json({ error: 'unable to extract components from messages' });
     }
     try {
-      const rows = await store.ingest(finalComponents, normalizedProfile, {
+      const rows = await store.ingest(finalComponents, normalizedAgent, {
         origin: { originType: 'conversation', originActor: userId },
         userId,
       });
-      res.json({ stored: rows.length, ids: rows.map((r) => r.id), profile: normalizedProfile });
+      res.json({ stored: rows.length, ids: rows.map((r) => r.id), agent: normalizedAgent });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? 'ingest failed' });
     }
   });
 
   router.post('/v1/ingest/documents', async (req: Request, res: Response) => {
-    const { path: docPath, profile } = req.body as {
+    const { path: docPath, agent } = req.body as {
       path?: string;
-      profile?: string;
+      agent?: string;
     };
 
     if (!docPath || !docPath.trim()) {
       return res.status(400).json({ error: 'path_required' });
     }
 
-    let normalizedProfile: string;
+    let normalizedAgent: string;
     try {
-      normalizedProfile = normalizeProfileSlug(profile);
+      normalizedAgent = normalizeAgentId(agent);
     } catch (err: any) {
-      if (err?.message === 'invalid_profile') {
-        return res.status(400).json({ error: 'invalid_profile' });
+      if (err?.message === 'invalid_agent') {
+        return res.status(400).json({ error: 'invalid_agent' });
       }
-      return res.status(500).json({ error: 'profile_normalization_failed' });
+      return res.status(500).json({ error: 'agent_normalization_failed' });
     }
 
     // Validate path exists
@@ -122,7 +124,7 @@ export function createMemoryRouter(store: SqliteMemoryStore): Router {
     }
 
     try {
-      const result = await ingestDocuments(docPath.trim(), store, normalizedProfile);
+      const result = await ingestDocuments(docPath.trim(), store, normalizedAgent, doExtract);
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? 'document ingestion failed' });
@@ -132,13 +134,13 @@ export function createMemoryRouter(store: SqliteMemoryStore): Router {
   router.get('/v1/summary', (req: Request, res: Response) => {
     try {
       const limit = Number(req.query.limit) || 50;
-      const profile = req.query.profile as string;
-      const normalizedProfile = normalizeProfileSlug(profile);
-      const summary = store.getSectorSummary(normalizedProfile);
-      const recent = store.getRecent(normalizedProfile, limit).map((r) => ({
+      const agent = req.query.agent as string;
+      const normalizedAgent = normalizeAgentId(agent);
+      const summary = store.getSectorSummary(normalizedAgent);
+      const recent = store.getRecent(normalizedAgent, limit).map((r) => ({
         id: r.id,
         sector: r.sector,
-        profile: r.profileId,
+        agent: r.agentId,
         createdAt: r.createdAt,
         lastAccessed: r.lastAccessed,
         preview: r.content,
@@ -146,10 +148,10 @@ export function createMemoryRouter(store: SqliteMemoryStore): Router {
         details: (r as any).details,
         userScope: (r as any).userScope ?? null,
       }));
-      res.json({ summary, recent, profile: normalizedProfile });
+      res.json({ summary, recent, agent: normalizedAgent });
     } catch (err: any) {
-      if (err?.message === 'invalid_profile') {
-        return res.status(400).json({ error: 'invalid_profile' });
+      if (err?.message === 'invalid_agent') {
+        return res.status(400).json({ error: 'invalid_agent' });
       }
       res.status(500).json({ error: err.message ?? 'summary failed' });
     }
@@ -158,28 +160,28 @@ export function createMemoryRouter(store: SqliteMemoryStore): Router {
   router.put('/v1/memory/:id', async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      const { content, sector, profile } = req.body as { content?: string; sector?: string; profile?: string };
+      const { content, sector, agent } = req.body as { content?: string; sector?: string; agent?: string };
 
       if (!id) return res.status(400).json({ error: 'id_required' });
       if (!content || !content.trim()) {
         return res.status(400).json({ error: 'content_required' });
       }
 
-      let normalizedProfile: string;
+      let normalizedAgent: string;
       try {
-        normalizedProfile = normalizeProfileSlug(profile);
+        normalizedAgent = normalizeAgentId(agent);
       } catch (err: any) {
-        if (err?.message === 'invalid_profile') {
-          return res.status(400).json({ error: 'invalid_profile' });
+        if (err?.message === 'invalid_agent') {
+          return res.status(400).json({ error: 'invalid_agent' });
         }
-        return res.status(500).json({ error: 'profile_normalization_failed' });
+        return res.status(500).json({ error: 'agent_normalization_failed' });
       }
 
-      const updated = await store.updateById(id, content.trim(), sector as any, normalizedProfile);
+      const updated = await store.updateById(id, content.trim(), sector as any, normalizedAgent);
       if (!updated) {
         return res.status(404).json({ error: 'not_found', id });
       }
-      res.json({ updated: true, id, profile: normalizedProfile });
+      res.json({ updated: true, id, agent: normalizedAgent });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? 'update failed' });
     }
@@ -188,25 +190,25 @@ export function createMemoryRouter(store: SqliteMemoryStore): Router {
   router.delete('/v1/memory/:id', (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      const profile = req.query.profile as string;
+      const agent = req.query.agent as string;
       if (!id) return res.status(400).json({ error: 'id_required' });
-      let normalizedProfile: string;
+      let normalizedAgent: string;
       try {
-        normalizedProfile = normalizeProfileSlug(profile);
+        normalizedAgent = normalizeAgentId(agent);
       } catch (err: any) {
-        if (err?.message === 'invalid_profile') {
-          return res.status(400).json({ error: 'invalid_profile' });
+        if (err?.message === 'invalid_agent') {
+          return res.status(400).json({ error: 'invalid_agent' });
         }
-        return res.status(500).json({ error: 'profile_normalization_failed' });
+        return res.status(500).json({ error: 'agent_normalization_failed' });
       }
-      const deleted = store.deleteById(id, normalizedProfile);
+      const deleted = store.deleteById(id, normalizedAgent);
       if (!deleted) {
         return res.status(404).json({ error: 'not_found', id });
       }
-      res.json({ deleted, profile: normalizedProfile });
+      res.json({ deleted, agent: normalizedAgent });
     } catch (err: any) {
-      if (err?.message === 'invalid_profile') {
-        return res.status(400).json({ error: 'invalid_profile' });
+      if (err?.message === 'invalid_agent') {
+        return res.status(400).json({ error: 'invalid_agent' });
       }
       res.status(500).json({ error: err.message ?? 'delete failed' });
     }
@@ -214,13 +216,13 @@ export function createMemoryRouter(store: SqliteMemoryStore): Router {
 
   router.delete('/v1/memory', (req: Request, res: Response) => {
     try {
-      const profile = req.query.profile as string;
-      const normalizedProfile = normalizeProfileSlug(profile);
-      const deleted = store.deleteAll(normalizedProfile);
-      res.json({ deleted, profile: normalizedProfile });
+      const agent = req.query.agent as string;
+      const normalizedAgent = normalizeAgentId(agent);
+      const deleted = store.deleteAll(normalizedAgent);
+      res.json({ deleted, agent: normalizedAgent });
     } catch (err: any) {
-      if (err?.message === 'invalid_profile') {
-        return res.status(400).json({ error: 'invalid_profile' });
+      if (err?.message === 'invalid_agent') {
+        return res.status(400).json({ error: 'invalid_agent' });
       }
       res.status(500).json({ error: err.message ?? 'delete all failed' });
     }
@@ -230,34 +232,34 @@ export function createMemoryRouter(store: SqliteMemoryStore): Router {
   router.delete('/v1/graph/triple/:id', (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      const profile = req.query.profile as string;
+      const agent = req.query.agent as string;
       if (!id) return res.status(400).json({ error: 'id_required' });
 
-      const deleted = store.deleteSemanticById(id, profile);
+      const deleted = store.deleteSemanticById(id, agent);
       if (!deleted) {
         return res.status(404).json({ error: 'not_found', id });
       }
 
       res.json({ deleted });
     } catch (err: any) {
-      if (err?.message === 'invalid_profile') {
-        return res.status(400).json({ error: 'invalid_profile' });
+      if (err?.message === 'invalid_agent') {
+        return res.status(400).json({ error: 'invalid_agent' });
       }
       res.status(500).json({ error: err.message ?? 'triple delete failed' });
     }
   });
 
   router.post('/v1/search', async (req: Request, res: Response) => {
-    const { query, profile, userId } = req.body as { query?: string; profile?: string; userId?: string };
+    const { query, agent, userId } = req.body as { query?: string; agent?: string; userId?: string };
     if (!query || !query.trim()) {
       return res.status(400).json({ error: 'query is required' });
     }
     try {
-      const result = await store.query(query, profile, userId);
+      const result = await store.query(query, agent, userId);
       res.json(result);
     } catch (err: any) {
-      if (err?.message === 'invalid_profile') {
-        return res.status(400).json({ error: 'invalid_profile' });
+      if (err?.message === 'invalid_agent') {
+        return res.status(400).json({ error: 'invalid_agent' });
       }
       res.status(500).json({ error: err.message ?? 'query failed' });
     }
@@ -267,13 +269,13 @@ export function createMemoryRouter(store: SqliteMemoryStore): Router {
 
   router.get('/v1/users', (req: Request, res: Response) => {
     try {
-      const profile = req.query.profile as string;
-      const normalizedProfile = normalizeProfileSlug(profile);
-      const users = store.getAgentUsers(normalizedProfile);
-      res.json({ users, profile: normalizedProfile });
+      const agent = req.query.agent as string;
+      const normalizedAgent = normalizeAgentId(agent);
+      const users = store.getAgentUsers(normalizedAgent);
+      res.json({ users, agent: normalizedAgent });
     } catch (err: any) {
-      if (err?.message === 'invalid_profile') {
-        return res.status(400).json({ error: 'invalid_profile' });
+      if (err?.message === 'invalid_agent') {
+        return res.status(400).json({ error: 'invalid_agent' });
       }
       res.status(500).json({ error: err.message ?? 'failed to fetch users' });
     }
@@ -282,27 +284,27 @@ export function createMemoryRouter(store: SqliteMemoryStore): Router {
   router.get('/v1/users/:id/memories', (req: Request, res: Response) => {
     try {
       const { id: userId } = req.params;
-      const profile = req.query.profile as string;
+      const agent = req.query.agent as string;
       const limit = Number(req.query.limit) || 50;
-      const normalizedProfile = normalizeProfileSlug(profile);
+      const normalizedAgent = normalizeAgentId(agent);
 
       if (!userId) {
         return res.status(400).json({ error: 'user_id_required' });
       }
 
-      const memories = store.getMemoriesForUser(normalizedProfile, userId, limit).map((r) => ({
+      const memories = store.getMemoriesForUser(normalizedAgent, userId, limit).map((r) => ({
         id: r.id,
         sector: r.sector,
-        profile: r.profileId,
+        agent: r.agentId,
         createdAt: r.createdAt,
         lastAccessed: r.lastAccessed,
         preview: r.content,
         details: (r as any).details,
       }));
-      res.json({ memories, userId, profile: normalizedProfile });
+      res.json({ memories, userId, agent: normalizedAgent });
     } catch (err: any) {
-      if (err?.message === 'invalid_profile') {
-        return res.status(400).json({ error: 'invalid_profile' });
+      if (err?.message === 'invalid_agent') {
+        return res.status(400).json({ error: 'invalid_agent' });
       }
       res.status(500).json({ error: err.message ?? 'failed to fetch user memories' });
     }
@@ -311,7 +313,7 @@ export function createMemoryRouter(store: SqliteMemoryStore): Router {
   // Graph traversal endpoints
   router.get('/v1/graph/triples', (req: Request, res: Response) => {
     try {
-      const { entity, direction, maxResults, predicate, profile, userId } = req.query;
+      const { entity, direction, maxResults, predicate, agent, userId } = req.query;
       if (!entity || typeof entity !== 'string') {
         return res.status(400).json({ error: 'entity query parameter is required' });
       }
@@ -319,7 +321,7 @@ export function createMemoryRouter(store: SqliteMemoryStore): Router {
       const options: any = {
         maxResults: maxResults ? Number(maxResults) : 100,
         predicateFilter: predicate as string | undefined,
-        profile: profile as string,
+        agent: agent as string,
         userId: userId as string | undefined,
       };
 
@@ -334,8 +336,8 @@ export function createMemoryRouter(store: SqliteMemoryStore): Router {
 
       res.json({ entity, triples, count: triples.length });
     } catch (err: any) {
-      if (err?.message === 'invalid_profile') {
-        return res.status(400).json({ error: 'invalid_profile' });
+      if (err?.message === 'invalid_agent') {
+        return res.status(400).json({ error: 'invalid_agent' });
       }
       res.status(500).json({ error: err.message ?? 'graph query failed' });
     }
@@ -343,16 +345,16 @@ export function createMemoryRouter(store: SqliteMemoryStore): Router {
 
   router.get('/v1/graph/neighbors', (req: Request, res: Response) => {
     try {
-      const { entity, profile, userId } = req.query;
+      const { entity, agent, userId } = req.query;
       if (!entity || typeof entity !== 'string') {
         return res.status(400).json({ error: 'entity query parameter is required' });
       }
 
-      const neighbors = Array.from(store.graph.findNeighbors(entity, { profile: profile as string, userId: userId as string | undefined }));
+      const neighbors = Array.from(store.graph.findNeighbors(entity, { agent: agent as string, userId: userId as string | undefined }));
       res.json({ entity, neighbors, count: neighbors.length });
     } catch (err: any) {
-      if (err?.message === 'invalid_profile') {
-        return res.status(400).json({ error: 'invalid_profile' });
+      if (err?.message === 'invalid_agent') {
+        return res.status(400).json({ error: 'invalid_agent' });
       }
       res.status(500).json({ error: err.message ?? 'neighbors query failed' });
     }
@@ -360,21 +362,21 @@ export function createMemoryRouter(store: SqliteMemoryStore): Router {
 
   router.get('/v1/graph/paths', (req: Request, res: Response) => {
     try {
-      const { from, to, maxDepth, profile, userId } = req.query;
+      const { from, to, maxDepth, agent, userId } = req.query;
       if (!from || typeof from !== 'string' || !to || typeof to !== 'string') {
         return res.status(400).json({ error: 'from and to query parameters are required' });
       }
 
       const paths = store.graph.findPaths(from, to, {
         maxDepth: maxDepth ? Number(maxDepth) : 3,
-        profile: profile as string,
+        agent: agent as string,
         userId: userId as string | undefined,
       });
 
       res.json({ from, to, paths, count: paths.length });
     } catch (err: any) {
-      if (err?.message === 'invalid_profile') {
-        return res.status(400).json({ error: 'invalid_profile' });
+      if (err?.message === 'invalid_agent') {
+        return res.status(400).json({ error: 'invalid_agent' });
       }
       res.status(500).json({ error: err.message ?? 'paths query failed' });
     }
@@ -382,9 +384,9 @@ export function createMemoryRouter(store: SqliteMemoryStore): Router {
 
   router.get('/v1/graph/visualization', (req: Request, res: Response) => {
     try {
-      const { entity, maxDepth, maxNodes, profile, includeHistory, userId } = req.query;
-      const profileValue = profile as string;
-      const normalizedProfile = normalizeProfileSlug(profileValue);
+      const { entity, maxDepth, maxNodes, agent, includeHistory, userId } = req.query;
+      const agentValue = agent as string;
+      const normalizedAgent = normalizeAgentId(agentValue);
       const centerEntity = (entity as string) || null;
       const depth = maxDepth ? Number(maxDepth) : 2;
       const nodeLimit = maxNodes ? Number(maxNodes) : 50;
@@ -392,7 +394,7 @@ export function createMemoryRouter(store: SqliteMemoryStore): Router {
 
       // If no center entity, get a sample of semantic triples
       if (!centerEntity) {
-        const allSemantic = store.getRecent(normalizedProfile, 100).filter((r) => r.sector === 'semantic');
+        const allSemantic = store.getRecent(normalizedAgent, 100).filter((r) => r.sector === 'semantic');
         const triples = allSemantic
           .slice(0, nodeLimit)
           .map((r) => (r as any).details)
@@ -417,18 +419,18 @@ export function createMemoryRouter(store: SqliteMemoryStore): Router {
           nodes: Array.from(nodes).map((id) => ({ id, label: id })),
           edges,
           includeHistory: showHistory,
-          profile: normalizedProfile,
+          agent: normalizedAgent,
         });
       }
 
       // Build graph from center entity
-      const graphOptions = { maxDepth: depth, profile: normalizedProfile, includeInvalidated: showHistory, userId: userId as string | undefined };
+      const graphOptions = { maxDepth: depth, agent: normalizedAgent, includeInvalidated: showHistory, userId: userId as string | undefined };
       const reachable = store.graph.findReachableEntities(centerEntity, graphOptions);
       const nodes = new Set<string>([centerEntity]);
       const edges: Array<{ source: string; target: string; predicate: string; isHistorical?: boolean }> = [];
 
       // Add center entity's connections
-      const centerTriples = store.graph.findConnectedTriples(centerEntity, { maxResults: 100, profile: normalizedProfile, includeInvalidated: showHistory, userId: userId as string | undefined });
+      const centerTriples = store.graph.findConnectedTriples(centerEntity, { maxResults: 100, agent: normalizedAgent, includeInvalidated: showHistory, userId: userId as string | undefined });
       for (const triple of centerTriples) {
         nodes.add(triple.subject);
         nodes.add(triple.object);
@@ -446,7 +448,7 @@ export function createMemoryRouter(store: SqliteMemoryStore): Router {
         .slice(0, nodeLimit - nodes.size);
 
       for (const [entity, _depth] of reachableArray) {
-        const entityTriples = store.graph.findTriplesBySubject(entity, { maxResults: 10, profile: normalizedProfile, includeInvalidated: showHistory, userId: userId as string | undefined });
+        const entityTriples = store.graph.findTriplesBySubject(entity, { maxResults: 10, agent: normalizedAgent, includeInvalidated: showHistory, userId: userId as string | undefined });
         for (const triple of entityTriples) {
           if (nodes.has(triple.subject) || nodes.has(triple.object)) {
             nodes.add(triple.subject);
@@ -466,11 +468,11 @@ export function createMemoryRouter(store: SqliteMemoryStore): Router {
         nodes: Array.from(nodes).map((id) => ({ id, label: id })),
         edges,
         includeHistory: showHistory,
-        profile: normalizedProfile,
+        agent: normalizedAgent,
       });
     } catch (err: any) {
-      if (err?.message === 'invalid_profile') {
-        return res.status(400).json({ error: 'invalid_profile' });
+      if (err?.message === 'invalid_agent') {
+        return res.status(400).json({ error: 'invalid_agent' });
       }
       res.status(500).json({ error: err.message ?? 'visualization query failed' });
     }

@@ -1,8 +1,9 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { SqliteMemoryStore } from './sqlite-store.js';
-import { extract } from './providers/extract.js';
-import { normalizeProfileSlug } from './utils.js';
+import type { ExtractFn } from './types.js';
+import { extract as defaultExtract } from './providers/extract.js';
+import { normalizeAgentId } from './utils.js';
 
 const MAX_CHUNK_CHARS = 12_000;
 
@@ -18,7 +19,7 @@ export interface IngestDocumentsResult {
   stored: number;
   skipped: number;
   errors: string[];
-  profile: string;
+  agent: string;
 }
 
 /**
@@ -132,11 +133,13 @@ async function collectMarkdownFiles(dirPath: string): Promise<string[]> {
 export async function ingestDocuments(
   dirPath: string,
   store: SqliteMemoryStore,
-  profile?: string,
+  agent?: string,
+  extractFn?: ExtractFn,
 ): Promise<IngestDocumentsResult> {
   const resolvedPath = path.resolve(dirPath);
   const files = await collectMarkdownFiles(resolvedPath);
   const basePath = (await fs.stat(resolvedPath)).isDirectory() ? resolvedPath : path.dirname(resolvedPath);
+  const doExtract = extractFn ?? defaultExtract;
 
   let totalChunks = 0;
   let totalStored = 0;
@@ -153,13 +156,13 @@ export async function ingestDocuments(
 
     for (const chunk of chunks) {
       try {
-        const components = await extract(chunk.text);
+        const components = await doExtract(chunk.text);
         if (!components) {
           totalSkipped++;
           continue;
         }
 
-        const rows = await store.ingest(components, profile, {
+        const rows = await store.ingest(components, agent, {
           source: chunk.source,
           deduplicate: true,
         });
@@ -181,6 +184,6 @@ export async function ingestDocuments(
     stored: totalStored,
     skipped: totalSkipped,
     errors,
-    profile: normalizeProfileSlug(profile),
+    agent: normalizeAgentId(agent),
   };
 }

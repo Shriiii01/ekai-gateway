@@ -1,4 +1,4 @@
-# Memory Service (Ekai)
+# Memory SDK (Ekai)
 
 Neuroscience-inspired, agent-centric memory kernel. Sectorized storage with PBWM gating — the agent reflects on conversations and decides what to learn. Memory is first-person, not a passive database about users.
 
@@ -11,26 +11,63 @@ npm install -w @ekai/memory
 npm run build -w @ekai/memory
 ```
 
-See [Usage Modes](#usage-modes) below for direct import, mountable router, and standalone options.
+See [Usage Modes](#usage-modes) below for SDK, mountable router, and standalone options.
 
-Env (root `.env` or `memory/.env`):
+### SDK Usage
+
+```ts
+import { Memory } from '@ekai/memory';
+
+// Setup — provider config is explicit, no env vars needed
+const mem = new Memory({ provider: 'openai', apiKey: 'sk-...' });
+mem.addAgent('my-bot', { name: 'My Bot', soul: 'You are helpful' });
+
+// Scoped instance — all data ops are agent-scoped
+const bot = new Memory({ provider: 'openai', apiKey: 'sk-...', agent: 'my-bot' });
+await bot.add(messages, { userId: 'alice' });
+await bot.search('preferences', { userId: 'alice' });
+bot.users();                            // agent's known users
+bot.memories();                         // all agent memories
+bot.memories({ userId: 'alice' });      // memories about alice
+bot.memories({ scope: 'global' });      // non-user-scoped memories
+bot.delete(id);
+```
+
+### Environment Variables
 
 | Variable | Default | Required |
 |----------|---------|----------|
-| `GOOGLE_API_KEY` | — | Yes |
-| `GEMINI_EXTRACT_MODEL` | `gemini-2.5-flash` | No |
-| `GEMINI_EMBED_MODEL` | `gemini-embedding-001` | No |
+| `GOOGLE_API_KEY` | — | Yes (if using Gemini provider) |
+| `OPENAI_API_KEY` | — | Yes (if using OpenAI provider) |
+| `OPENROUTER_API_KEY` | — | Yes (if using OpenRouter provider) |
+| `MEMORY_EMBED_PROVIDER` | `gemini` | No |
+| `MEMORY_EXTRACT_PROVIDER` | `gemini` | No |
 | `MEMORY_DB_PATH` | `./memory.db` | No |
 | `MEMORY_CORS_ORIGIN` | `*` | No (standalone mode only) |
 
 ## Usage Modes
 
-### 1. Direct import
-
-Use the memory store and embedding functions directly in your code:
+### 1. SDK (recommended)
 
 ```ts
-import { SqliteMemoryStore, embed } from '@ekai/memory';
+import { Memory } from '@ekai/memory';
+
+const mem = new Memory({
+  provider: 'openai',
+  apiKey: 'sk-...',
+  agent: 'my-bot',
+});
+
+// Management (no agent scope needed)
+mem.addAgent('my-bot', { name: 'My Bot', soul: 'You are helpful' });
+mem.getAgents();
+
+// Data ops (require agent scope)
+await mem.add(messages, { userId: 'alice' });
+await mem.search('query', { userId: 'alice' });
+mem.users();
+mem.memories({ userId: 'alice' });
+mem.delete(id);
 ```
 
 ### 2. Mountable router
@@ -38,10 +75,10 @@ import { SqliteMemoryStore, embed } from '@ekai/memory';
 Mount memory endpoints into an existing Express app:
 
 ```ts
-import { createMemoryRouter } from '@ekai/memory';
+import { Memory, createMemoryRouter } from '@ekai/memory';
 
-const memoryRouter = createMemoryRouter();
-app.use(memoryRouter);
+const memory = new Memory({ provider: 'openai', apiKey: 'sk-...' });
+app.use(createMemoryRouter(memory._store, memory._extractFn));
 ```
 
 This is how the OpenRouter integration embeds memory on port `4010`.
@@ -145,12 +182,12 @@ Ingest a conversation. Full conversation (user + assistant) goes to the LLM for 
     { "role": "user", "content": "I prefer dark mode and use TypeScript" },
     { "role": "assistant", "content": "Noted!" }
   ],
-  "profile": "my-agent",
+  "agent": "my-bot",
   "userId": "sha"
 }
 ```
 ```json
-{ "stored": 3, "ids": ["...", "...", "..."], "profile": "my-agent" }
+{ "stored": 3, "ids": ["...", "...", "..."], "agent": "my-bot" }
 ```
 
 ### `POST /v1/search`
@@ -158,15 +195,15 @@ Ingest a conversation. Full conversation (user + assistant) goes to the LLM for 
 Search with PBWM gating. Pass `userId` for user-scoped retrieval.
 
 ```json
-{ "query": "what does Sha prefer?", "profile": "my-agent", "userId": "sha" }
+{ "query": "what does Sha prefer?", "agent": "my-bot", "userId": "sha" }
 ```
 ```json
 {
   "workingMemory": [
     { "sector": "semantic", "content": "Sha prefers dark mode", "score": 0.87, "details": { "subject": "Sha", "predicate": "prefers", "object": "dark mode", "domain": "user" } }
   ],
-  "perSector": { "episodic": [], "semantic": [...], "procedural": [], "reflective": [] },
-  "profileId": "my-agent"
+  "perSector": { "episodic": [], "semantic": [...], "procedural": [] },
+  "agentId": "my-bot"
 }
 ```
 
@@ -175,18 +212,17 @@ Search with PBWM gating. Pass `userId` for user-scoped retrieval.
 Per-sector counts + recent memories.
 
 ```
-GET /v1/summary?profile=my-agent&limit=20
+GET /v1/summary?agent=my-bot&limit=20
 ```
 ```json
 {
   "summary": [
     { "sector": "episodic", "count": 3, "lastCreatedAt": 1700000000 },
     { "sector": "semantic", "count": 12, "lastCreatedAt": 1700100000 },
-    { "sector": "procedural", "count": 1, "lastCreatedAt": 1700050000 },
-    { "sector": "reflective", "count": 2, "lastCreatedAt": 1700090000 }
+    { "sector": "procedural", "count": 1, "lastCreatedAt": 1700050000 }
   ],
   "recent": [{ "id": "...", "sector": "semantic", "preview": "dark mode", "details": {...} }],
-  "profile": "my-agent"
+  "agent": "my-bot"
 }
 ```
 
@@ -195,7 +231,7 @@ GET /v1/summary?profile=my-agent&limit=20
 Ingest markdown files from a directory with deduplication.
 
 ```json
-{ "path": "/path/to/docs", "profile": "project-x" }
+{ "path": "/path/to/docs", "agent": "my-bot" }
 ```
 
 ### `GET /v1/users`
@@ -203,7 +239,7 @@ Ingest markdown files from a directory with deduplication.
 List all users the agent has interacted with.
 
 ```
-GET /v1/users?profile=my-agent
+GET /v1/users?agent=my-bot
 ```
 ```json
 {
@@ -225,11 +261,11 @@ Get all memories scoped to a specific user.
 | GET | `/v1/summary` | Sector counts + recent |
 | GET | `/v1/users` | List agent's users |
 | GET | `/v1/users/:id/memories` | User-scoped memories |
-| GET | `/v1/profiles` | List profiles |
+| GET | `/v1/agents` | List agents |
 | PUT | `/v1/memory/:id` | Update a memory |
 | DELETE | `/v1/memory/:id` | Delete one memory |
-| DELETE | `/v1/memory` | Delete all for profile |
-| DELETE | `/v1/profiles/:slug` | Delete profile + memories |
+| DELETE | `/v1/memory` | Delete all for agent |
+| DELETE | `/v1/agents/:slug` | Delete agent + memories |
 | GET | `/v1/graph/triples` | Query semantic triples |
 | GET | `/v1/graph/neighbors` | Entity neighbors |
 | GET | `/v1/graph/paths` | Paths between entities |
@@ -237,7 +273,7 @@ Get all memories scoped to a specific user.
 | DELETE | `/v1/graph/triple/:id` | Delete a triple |
 | GET | `/health` | Health check |
 
-All endpoints support `profile` query/body param. In the default deployment, these are served on the OpenRouter port (`4010`).
+All endpoints support `agent` query/body param. In the default deployment, these are served on the OpenRouter port (`4010`).
 
 ## Retrieval Pipeline
 
@@ -249,7 +285,7 @@ graph LR
   classDef o fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
 
   Q["Query + userId"]:::i
-  EMB["4 embeddings<br>(per sector)"]:::p
+  EMB["3 embeddings<br>(per sector)"]:::p
   F["cosine >= 0.2<br>+ user_scope"]:::e
   G["PBWM gate<br>sigmoid(1.0r + 0.4e + 0.05c - 0.02n)"]:::e
   W["Working Memory<br>top-4/sector, cap 8"]:::o
@@ -257,27 +293,25 @@ graph LR
   Q --> EMB --> F --> G --> W
 ```
 
-Sector weights: episodic `1.0`, semantic `1.0`, procedural `1.0`, reflective `0.8`.
-
 ## Data Model
 
 ```mermaid
 erDiagram
-    profiles ||--o{ memory : has
-    profiles ||--o{ semantic_memory : has
-    profiles ||--o{ procedural_memory : has
-    profiles ||--o{ reflective_memory : has
-    profiles ||--o{ agent_users : has
+    agents ||--o{ memory : has
+    agents ||--o{ semantic_memory : has
+    agents ||--o{ procedural_memory : has
+    agents ||--o{ reflective_memory : has
+    agents ||--o{ agent_users : has
 
     memory { text id PK; text sector; text content; text user_scope; text origin_type }
     semantic_memory { text id PK; text subject; text predicate; text object; text domain; text user_scope; real strength }
     procedural_memory { text id PK; text trigger; json steps; text user_scope; text origin_type }
     reflective_memory { text id PK; text observation; text origin_type; text origin_actor }
     agent_users { text agent_id PK; text user_id PK; int interaction_count }
-    profiles { text slug PK; int created_at }
+    agents { text id PK; text name; text soul_md; int created_at }
 ```
 
-All tables share: `embedding`, `created_at`, `last_accessed`, `profile_id`, `source`, `origin_type`, `origin_actor`, `origin_ref`. Schema auto-upgrades on startup.
+All tables share: `embedding`, `created_at`, `last_accessed`, `agent_id`, `source`, `origin_type`, `origin_actor`, `origin_ref`. Clean schema — no migrations, old DBs re-create.
 
 ## Integration
 
@@ -301,7 +335,8 @@ My observations:
 
 ## Notes
 
-- Supports Gemini and OpenAI-compatible APIs for extraction/embedding
+- Supports Gemini, OpenAI, and OpenRouter providers for extraction/embedding
+- Provider config via constructor: `new Memory({ provider: 'openai', apiKey: '...' })`
+- Agents are first-class: `addAgent()` required before data ops (auto-created for `default`)
 - `user_scope` is opt-in — no `userId` = all memories returned
-- Schema migrations are additive — existing DBs auto-upgrade, no manual steps
 - Reflective weight `0.8` is a tuning knob

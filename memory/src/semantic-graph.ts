@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { normalizeProfileSlug } from './utils.js';
+import { normalizeAgentId } from './utils.js';
 import type { SemanticMemoryRecord, GraphTraversalOptions, GraphPath } from './types.js';
 
 /**
@@ -20,16 +20,16 @@ export class SemanticGraphTraversal {
    */
   findTriplesBySubject(
     subject: string,
-    options: GraphTraversalOptions & { profile?: string } = {},
+    options: GraphTraversalOptions = {},
   ): SemanticMemoryRecord[] {
     const { maxResults = 100, includeInvalidated = false, predicateFilter, userId } = options;
-    const profileId = normalizeProfileSlug(options.profile);
+    const agentId = normalizeAgentId(options.agent);
     const now = this.now();
 
     let query = `select id, subject, predicate, object, valid_from as validFrom, valid_to as validTo,
-                  created_at as createdAt, updated_at as updatedAt, embedding, metadata, profile_id as profileId
+                  created_at as createdAt, updated_at as updatedAt, embedding, metadata, agent_id as agentId
            from semantic_memory
-           where subject = @subject and profile_id = @profileId`;
+           where subject = @subject and agent_id = @agentId`;
 
     if (!includeInvalidated) {
       query += ` and (valid_to is null or valid_to > @now)`;
@@ -45,14 +45,14 @@ export class SemanticGraphTraversal {
 
     query += ` order by updated_at desc limit @maxResults`;
 
-    const params: Record<string, any> = { subject, now, maxResults, profileId };
+    const params: Record<string, any> = { subject, now, maxResults, agentId };
     if (predicateFilter) {
       params.predicateFilter = predicateFilter;
     }
     if (userId) {
       params.userId = userId;
     }
-    
+
     const rows = this.db
       .prepare(query)
       .all(params) as Array<Omit<SemanticMemoryRecord, 'embedding'>>;
@@ -69,16 +69,16 @@ export class SemanticGraphTraversal {
    */
   findTriplesByObject(
     object: string,
-    options: GraphTraversalOptions & { profile?: string } = {},
+    options: GraphTraversalOptions = {},
   ): SemanticMemoryRecord[] {
     const { maxResults = 100, includeInvalidated = false, predicateFilter, userId } = options;
-    const profileId = normalizeProfileSlug(options.profile);
+    const agentId = normalizeAgentId(options.agent);
     const now = this.now();
 
     let query = `select id, subject, predicate, object, valid_from as validFrom, valid_to as validTo,
-                  created_at as createdAt, updated_at as updatedAt, embedding, metadata, profile_id as profileId
+                  created_at as createdAt, updated_at as updatedAt, embedding, metadata, agent_id as agentId
            from semantic_memory
-           where object = @object and profile_id = @profileId`;
+           where object = @object and agent_id = @agentId`;
 
     if (!includeInvalidated) {
       query += ` and (valid_to is null or valid_to > @now)`;
@@ -94,14 +94,14 @@ export class SemanticGraphTraversal {
 
     query += ` order by updated_at desc limit @maxResults`;
 
-    const params: Record<string, any> = { object, now, maxResults, profileId };
+    const params: Record<string, any> = { object, now, maxResults, agentId };
     if (predicateFilter) {
       params.predicateFilter = predicateFilter;
     }
     if (userId) {
       params.userId = userId;
     }
-    
+
     const rows = this.db
       .prepare(query)
       .all(params) as Array<Omit<SemanticMemoryRecord, 'embedding'>>;
@@ -118,22 +118,22 @@ export class SemanticGraphTraversal {
    */
   findConnectedTriples(
     entity: string,
-    options: GraphTraversalOptions & { profile?: string } = {},
+    options: GraphTraversalOptions = {},
   ): SemanticMemoryRecord[] {
     const outgoing = this.findTriplesBySubject(entity, options);
     const incoming = this.findTriplesByObject(entity, options);
-    
+
     // Deduplicate by id
     const seen = new Set<string>();
     const result: SemanticMemoryRecord[] = [];
-    
+
     for (const triple of [...outgoing, ...incoming]) {
       if (!seen.has(triple.id)) {
         seen.add(triple.id);
         result.push(triple);
       }
     }
-    
+
     return result;
   }
 
@@ -142,11 +142,11 @@ export class SemanticGraphTraversal {
    */
   findNeighbors(
     entity: string,
-    options: GraphTraversalOptions & { profile?: string } = {},
+    options: GraphTraversalOptions = {},
   ): Set<string> {
     const triples = this.findConnectedTriples(entity, options);
     const neighbors = new Set<string>();
-    
+
     for (const triple of triples) {
       if (triple.subject !== entity) {
         neighbors.add(triple.subject);
@@ -155,7 +155,7 @@ export class SemanticGraphTraversal {
         neighbors.add(triple.object);
       }
     }
-    
+
     return neighbors;
   }
 
@@ -165,10 +165,10 @@ export class SemanticGraphTraversal {
   findPaths(
     fromEntity: string,
     toEntity: string,
-    options: GraphTraversalOptions & { profile?: string } = {},
+    options: GraphTraversalOptions = {},
   ): GraphPath[] {
     const { maxDepth = 3 } = options;
-    
+
     if (fromEntity === toEntity) {
       return [];
     }
@@ -219,7 +219,7 @@ export class SemanticGraphTraversal {
    */
   findReachableEntities(
     entity: string,
-    options: GraphTraversalOptions & { profile?: string } = {},
+    options: GraphTraversalOptions = {},
   ): Map<string, number> {
     const { maxDepth = 2 } = options;
     const reachable = new Map<string, number>();
@@ -250,4 +250,3 @@ export class SemanticGraphTraversal {
     return reachable;
   }
 }
-
