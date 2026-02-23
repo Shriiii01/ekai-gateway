@@ -149,11 +149,6 @@ export interface GraphTraversalOptions {
   userId?: string;
 }
 
-export interface GraphPath {
-  path: SemanticMemoryRecord[];
-  depth: number;
-}
-
 export interface IngestOptions {
   source?: string;
   deduplicate?: boolean;

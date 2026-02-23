@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import { normalizeAgentId } from './utils.js';
-import type { SemanticMemoryRecord, GraphTraversalOptions, GraphPath } from './types.js';
+import type { SemanticMemoryRecord, GraphTraversalOptions } from './types.js';
 
 /**
  * Graph traversal operations for semantic memory (RDF triples)
@@ -135,83 +135,6 @@ export class SemanticGraphTraversal {
     }
 
     return result;
-  }
-
-  /**
-   * Find all entities connected to a given entity (neighbors)
-   */
-  findNeighbors(
-    entity: string,
-    options: GraphTraversalOptions = {},
-  ): Set<string> {
-    const triples = this.findConnectedTriples(entity, options);
-    const neighbors = new Set<string>();
-
-    for (const triple of triples) {
-      if (triple.subject !== entity) {
-        neighbors.add(triple.subject);
-      }
-      if (triple.object !== entity) {
-        neighbors.add(triple.object);
-      }
-    }
-
-    return neighbors;
-  }
-
-  /**
-   * Find paths between two entities using breadth-first search
-   */
-  findPaths(
-    fromEntity: string,
-    toEntity: string,
-    options: GraphTraversalOptions = {},
-  ): GraphPath[] {
-    const { maxDepth = 3 } = options;
-
-    if (fromEntity === toEntity) {
-      return [];
-    }
-
-    // BFS to find all paths
-    const paths: GraphPath[] = [];
-    const queue: Array<{ entity: string; path: SemanticMemoryRecord[]; depth: number }> = [
-      { entity: fromEntity, path: [], depth: 0 },
-    ];
-    const visited = new Set<string>([fromEntity]);
-
-    while (queue.length > 0) {
-      const { entity, path, depth } = queue.shift()!;
-
-      if (depth >= maxDepth) {
-        continue;
-      }
-
-      // Find all outgoing edges from current entity
-      const outgoing = this.findTriplesBySubject(entity, {
-        ...options,
-        maxResults: 100,
-      });
-
-      for (const triple of outgoing) {
-        // Skip if already in path (avoid cycles)
-        if (path.some((p) => p.id === triple.id)) {
-          continue;
-        }
-
-        const newPath = [...path, triple];
-
-        if (triple.object === toEntity) {
-          // Found a path!
-          paths.push({ path: newPath, depth: depth + 1 });
-        } else if (!visited.has(triple.object)) {
-          visited.add(triple.object);
-          queue.push({ entity: triple.object, path: newPath, depth: depth + 1 });
-        }
-      }
-    }
-
-    return paths;
   }
 
   /**

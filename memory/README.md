@@ -258,10 +258,8 @@ Get all memories scoped to a specific user.
 | DELETE | `/v1/memory/:id` | Delete one memory |
 | DELETE | `/v1/memory` | Delete all for agent |
 | DELETE | `/v1/agents/:slug` | Delete agent + memories |
-| GET | `/v1/graph/triples` | Query semantic triples |
-| GET | `/v1/graph/neighbors` | Entity neighbors |
-| GET | `/v1/graph/paths` | Paths between entities |
-| GET | `/v1/graph/visualization` | Graph visualization data |
+| GET | `/v1/graph/triples` | Query semantic triples by entity |
+| GET | `/v1/graph/visualization` | Graph visualization data (dashboard) |
 | DELETE | `/v1/graph/triple/:id` | Delete a triple |
 | GET | `/health` | Health check |
 

@@ -147,32 +147,6 @@ export const apiService = {
     return response.json();
   },
 
-  async getGraphNeighbors(entity: string): Promise<{ entity: string; neighbors: string[]; count: number }> {
-    const response = await fetch(`${MEMORY_BASE_URL}/v1/graph/neighbors?entity=${encodeURIComponent(entity)}`);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch neighbors: ${response.statusText}`);
-    }
-    return response.json();
-  },
-
-  async getGraphPaths(from: string, to: string, maxDepth?: number): Promise<{
-    from: string;
-    to: string;
-    paths: Array<{ path: Array<{ subject: string; predicate: string; object: string }>; depth: number }>;
-    count: number;
-  }> {
-    const searchParams = new URLSearchParams();
-    searchParams.append('from', from);
-    searchParams.append('to', to);
-    if (maxDepth) searchParams.append('maxDepth', String(maxDepth));
-
-    const response = await fetch(`${MEMORY_BASE_URL}/v1/graph/paths?${searchParams.toString()}`);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch paths: ${response.statusText}`);
-    }
-    return response.json();
-  },
-
   async getProfiles(): Promise<{ profiles: string[] }> {
     const response = await fetch(`${MEMORY_BASE_URL}/v1/profiles`);
     if (!response.ok) {

@@ -307,45 +307,6 @@ export function createMemoryRouter(store: SqliteMemoryStore, extractFn?: Extract
     }
   });
 
-  router.get('/v1/graph/neighbors', (req: Request, res: Response) => {
-    try {
-      const { entity, agent, userId } = req.query;
-      if (!entity || typeof entity !== 'string') {
-        return res.status(400).json({ error: 'entity query parameter is required' });
-      }
-
-      const neighbors = Array.from(store.graph.findNeighbors(entity, { agent: agent as string, userId: userId as string | undefined }));
-      res.json({ entity, neighbors, count: neighbors.length });
-    } catch (err: any) {
-      if (err?.message === 'invalid_agent') {
-        return res.status(400).json({ error: 'invalid_agent' });
-      }
-      res.status(500).json({ error: err.message ?? 'neighbors query failed' });
-    }
-  });
-
-  router.get('/v1/graph/paths', (req: Request, res: Response) => {
-    try {
-      const { from, to, maxDepth, agent, userId } = req.query;
-      if (!from || typeof from !== 'string' || !to || typeof to !== 'string') {
-        return res.status(400).json({ error: 'from and to query parameters are required' });
-      }
-
-      const paths = store.graph.findPaths(from, to, {
-        maxDepth: maxDepth ? Number(maxDepth) : 3,
-        agent: agent as string,
-        userId: userId as string | undefined,
-      });
-
-      res.json({ from, to, paths, count: paths.length });
-    } catch (err: any) {
-      if (err?.message === 'invalid_agent') {
-        return res.status(400).json({ error: 'invalid_agent' });
-      }
-      res.status(500).json({ error: err.message ?? 'paths query failed' });
-    }
-  });
-
   router.get('/v1/graph/visualization', (req: Request, res: Response) => {
     try {
       const { entity, maxDepth, maxNodes, agent, includeHistory, userId } = req.query;
