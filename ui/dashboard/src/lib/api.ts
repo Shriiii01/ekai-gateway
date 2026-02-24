@@ -34,10 +34,11 @@ export interface MemorySummaryResponse {
 
 // API service functions
 export const apiService = {
-  async getMemorySummary(limit = 50, agent?: string): Promise<MemorySummaryResponse> {
+  async getMemorySummary(limit = 50, agent?: string, userId?: string): Promise<MemorySummaryResponse> {
     const params = new URLSearchParams();
     params.append('limit', String(limit));
     if (agent) params.append('agent', agent);
+    if (userId) params.append('userId', userId);
 
     const response = await fetch(`${MEMORY_BASE_URL}/v1/summary?${params.toString()}`);
     if (!response.ok) {

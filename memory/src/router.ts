@@ -115,9 +115,10 @@ export function createMemoryRouter(store: SqliteMemoryStore, extractFn?: Extract
     try {
       const limit = Number(req.query.limit) || 50;
       const agent = req.query.agent as string;
+      const userId = req.query.userId as string | undefined;
       const normalizedAgent = normalizeAgentId(agent);
       const summary = store.getSectorSummary(normalizedAgent);
-      const recent = store.getRecent(normalizedAgent, limit).map((r) => ({
+      const recent = store.getRecent(normalizedAgent, limit, userId || undefined).map((r) => ({
         id: r.id,
         sector: r.sector,
         agent: r.agentId,

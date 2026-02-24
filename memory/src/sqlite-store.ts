@@ -353,20 +353,21 @@ export class SqliteMemoryStore {
     return defaults.map((d) => map.get(d.sector) ?? d);
   }
 
-  getRecent(agent: string | undefined, limit: number): (MemoryRecord & { details?: any })[] {
+  getRecent(agent: string | undefined, limit: number, userId?: string): (MemoryRecord & { details?: any })[] {
     const agentId = normalizeAgentId(agent);
     this.ensureAgentExists(agentId);
+    const userFilter = userId ? 'and (user_scope is null or user_scope = @userId)' : '';
     const rows = this.db
       .prepare(
         `select id, sector, content, embedding, created_at as createdAt, last_accessed as lastAccessed, '{}' as details, event_start as eventStart, event_end as eventEnd, retrieval_count as retrievalCount, user_scope as userScope, source
          from memory
-         where agent_id = @agentId
+         where agent_id = @agentId ${userFilter}
          union all
          select id, 'procedural' as sector, trigger as content, embedding, created_at as createdAt, last_accessed as lastAccessed,
                 json_object('trigger', trigger, 'goal', goal, 'context', context, 'result', result, 'steps', json(steps)) as details,
                 null as eventStart, null as eventEnd, 0 as retrievalCount, user_scope as userScope, source
          from procedural_memory
-         where agent_id = @agentId
+         where agent_id = @agentId ${userFilter}
          union all
          select id, 'semantic' as sector, object as content, json('[]') as embedding, created_at as createdAt, updated_at as lastAccessed,
                 json_object('subject', subject, 'predicate', predicate, 'object', object, 'validFrom', valid_from, 'validTo', valid_to, 'strength', strength, 'metadata', metadata, 'domain', domain) as details,
@@ -374,10 +375,11 @@ export class SqliteMemoryStore {
          from semantic_memory
          where agent_id = @agentId
            and (valid_to is null or valid_to > @now)
+           ${userFilter}
          order by createdAt desc
          limit @limit`,
       )
-      .all({ agentId, limit, now: this.now() }) as Array<Omit<MemoryRecord, 'embedding' | 'agentId'> & { details: string }>;
+      .all({ agentId, limit, now: this.now(), userId }) as Array<Omit<MemoryRecord, 'embedding' | 'agentId'> & { details: string }>;
 
     return rows.map((row) => {
       const parsed = {

@@ -66,14 +66,14 @@ export default function MemoryVaultPage() {
       setLoading(true);
       setError(null);
       // Fetch more items for better visualization (limit=100)
-      const res = await apiService.getMemorySummary(100, currentProfile);
+      const res = await apiService.getMemorySummary(100, currentProfile, selectedUserId || undefined);
       setData(res);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load memory summary');
     } finally {
       setLoading(false);
     }
-  }, [currentProfile, profileResolved]);
+  }, [currentProfile, profileResolved, selectedUserId]);
 
   useEffect(() => {
     fetchData();
@@ -172,8 +172,8 @@ export default function MemoryVaultPage() {
   const filteredMemories = useMemo(() => {
     if (!data?.recent) return [];
     return data.recent.filter((item) => {
-      // Exclude semantic memories (visualized in Knowledge Graph tab) and reflective memories (disabled)
-      if (item.sector === 'semantic' || item.sector === 'reflective') return false;
+      // Exclude reflective memories (disabled)
+      if (item.sector === 'reflective') return false;
       const matchesSearch = !searchTerm || item.preview.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesSector = filterSector === 'all' || item.sector === filterSector;
       const matchesUser = !selectedUserId || item.userScope == null || item.userScope === selectedUserId;
