@@ -68,8 +68,9 @@ app.post('/v1/chat/completions', async (req, res) => {
       }
     }
 
-    // Fire-and-forget: ingest original messages for future recall
-    ingestMessages(originalMessages, profile);
+    // Ingestion disabled — re-ingesting full conversation on every call causes
+    // runaway memory growth (no dedup). Will re-enable with proper deduplication.
+    // ingestMessages(originalMessages, profile);
 
     await proxyToOpenRouter(body, res, clientKey);
   } catch (err: any) {
