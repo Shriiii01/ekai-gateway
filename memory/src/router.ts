@@ -337,7 +337,7 @@ export function createMemoryRouter(store: SqliteMemoryStore, extractFn?: Extract
 
       // If no center entity, get a sample of semantic triples
       if (!centerEntity) {
-        const allSemantic = store.getRecent(normalizedAgent, 100).filter((r) => r.sector === 'semantic');
+        const allSemantic = store.getRecent(normalizedAgent, 100, userId as string | undefined).filter((r) => r.sector === 'semantic');
         const triples = allSemantic
           .slice(0, nodeLimit)
           .map((r) => (r as any).details)

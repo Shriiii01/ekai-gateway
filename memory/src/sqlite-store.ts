@@ -356,7 +356,7 @@ export class SqliteMemoryStore {
   getRecent(agent: string | undefined, limit: number, userId?: string): (MemoryRecord & { details?: any })[] {
     const agentId = normalizeAgentId(agent);
     this.ensureAgentExists(agentId);
-    const userFilter = userId ? 'and (user_scope is null or user_scope = @userId)' : '';
+    const userFilter = userId ? 'and user_scope = @userId' : '';
     const rows = this.db
       .prepare(
         `select id, sector, content, embedding, created_at as createdAt, last_accessed as lastAccessed, '{}' as details, event_start as eventStart, event_end as eventEnd, retrieval_count as retrievalCount, user_scope as userScope, source
@@ -369,7 +369,7 @@ export class SqliteMemoryStore {
          from procedural_memory
          where agent_id = @agentId ${userFilter}
          union all
-         select id, 'semantic' as sector, object as content, json('[]') as embedding, created_at as createdAt, updated_at as lastAccessed,
+         select id, 'semantic' as sector, subject || ' → ' || predicate || ' → ' || object as content, json('[]') as embedding, created_at as createdAt, updated_at as lastAccessed,
                 json_object('subject', subject, 'predicate', predicate, 'object', object, 'validFrom', valid_from, 'validTo', valid_to, 'strength', strength, 'metadata', metadata, 'domain', domain) as details,
                 null as eventStart, null as eventEnd, 0 as retrievalCount, user_scope as userScope, source
          from semantic_memory
@@ -484,7 +484,7 @@ export class SqliteMemoryStore {
          from procedural_memory
          where agent_id = @agentId and user_scope = @userId
          union all
-         select id, 'semantic' as sector, object as content, json('[]') as embedding, created_at as createdAt, updated_at as lastAccessed,
+         select id, 'semantic' as sector, subject || ' → ' || predicate || ' → ' || object as content, json('[]') as embedding, created_at as createdAt, updated_at as lastAccessed,
                 json_object('subject', subject, 'predicate', predicate, 'object', object, 'validFrom', valid_from, 'validTo', valid_to, 'strength', strength, 'domain', domain) as details,
                 null as eventStart, null as eventEnd, 0 as retrievalCount
          from semantic_memory
@@ -520,7 +520,7 @@ export class SqliteMemoryStore {
          from procedural_memory
          where agent_id = @agentId and user_scope is null
          union all
-         select id, 'semantic' as sector, object as content, json('[]') as embedding, created_at as createdAt, updated_at as lastAccessed,
+         select id, 'semantic' as sector, subject || ' → ' || predicate || ' → ' || object as content, json('[]') as embedding, created_at as createdAt, updated_at as lastAccessed,
                 json_object('subject', subject, 'predicate', predicate, 'object', object, 'validFrom', valid_from, 'validTo', valid_to, 'strength', strength, 'domain', domain) as details,
                 null as eventStart, null as eventEnd, 0 as retrievalCount
          from semantic_memory

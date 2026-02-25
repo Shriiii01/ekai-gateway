@@ -5,7 +5,6 @@ import {
   apiService,
   type MemorySummaryResponse,
 } from '@/lib/api';
-import Link from 'next/link';
 import { SectorTooltip, sectorColors, capitalizeSector } from '@/components/memory/SectorTooltip';
 import { ProceduralCard } from '@/components/memory/ProceduralCard';
 import { DeleteModal, EditModal } from '@/components/memory/MemoryModals';
@@ -18,7 +17,6 @@ import UserFilter from '@/components/memory/UserFilter';
 import ProfileManagement from '@/components/memory/ProfileManagement';
 import ProfileStats from '@/components/memory/ProfileStats';
 import ProfileBadge from '@/components/memory/ProfileBadge';
-import { MEMORY_PORT } from '@/lib/constants';
 
 
 export default function MemoryVaultPage() {
@@ -40,15 +38,6 @@ export default function MemoryVaultPage() {
   const [profileResolved, setProfileResolved] = useState(false);
   const [showProfileManagement, setShowProfileManagement] = useState(false);
   const [profileSwitching, setProfileSwitching] = useState(false);
-  const [embedded, setEmbedded] = useState(false);
-
-  useEffect(() => {
-    setEmbedded(
-      process.env.NEXT_PUBLIC_EMBEDDED_MODE === 'true' ||
-      window.location.port === MEMORY_PORT
-    );
-  }, []);
-
   // On mount, pick the first non-default agent (or fall back to 'default')
   useEffect(() => {
     apiService.getAgents().then(({ agents }) => {
@@ -176,7 +165,7 @@ export default function MemoryVaultPage() {
       if (item.sector === 'reflective') return false;
       const matchesSearch = !searchTerm || item.preview.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesSector = filterSector === 'all' || item.sector === filterSector;
-      const matchesUser = !selectedUserId || item.userScope == null || item.userScope === selectedUserId;
+      const matchesUser = !selectedUserId || item.userScope === selectedUserId;
       return matchesSearch && matchesSector && matchesUser;
     });
   }, [data, searchTerm, filterSector, selectedUserId]);
@@ -186,7 +175,7 @@ export default function MemoryVaultPage() {
     if (!data) return null;
     const filtered = data.recent?.filter(r => {
       if (r.sector === 'reflective') return false;
-      if (selectedUserId && r.userScope != null && r.userScope !== selectedUserId) return false;
+      if (selectedUserId && r.userScope !== selectedUserId) return false;
       return true;
     });
     // Recompute summary counts from filtered recent items when user filter is active
@@ -248,16 +237,6 @@ export default function MemoryVaultPage() {
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              {!embedded && (
-                <Link
-                  href="/"
-                  className="text-stone-500 hover:text-stone-900 transition-colors p-2 rounded-full hover:bg-stone-100"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                  </svg>
-                </Link>
-              )}
               <div>
                 <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Memory Vault</h1>
                 <p className="text-sm text-stone-500 mt-0.5">
@@ -426,6 +405,7 @@ export default function MemoryVaultPage() {
                   <option value="all">All Sectors</option>
                   <option value="episodic">Episodic</option>
                   <option value="procedural">Procedural</option>
+                  <option value="semantic">Semantic</option>
                 </select>
                 <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
                   <svg className="w-4 h-4 text-stone-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
