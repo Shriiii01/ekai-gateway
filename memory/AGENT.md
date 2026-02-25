@@ -153,7 +153,7 @@ CONTROL_SIGNAL    = 0.3  (fixed)
 **Formula** (`scoreRowPBWM`, `scoring.ts:22-53`):
 ```
 relevance     = cosineSimilarity(queryEmbedding, row.embedding)
-expectedValue = normalizeRetrieval(row)   // log-normalized retrieval_count + strength
+expectedValue = normalizeRetrieval(row)   // log-normalized retrieval_count
 noise         = gaussianNoise(mean=0, std=0.05)
 
 x = 1.0 * relevance + 0.4 * expectedValue + 0.05 * 0.3 - 0.02 * noise
@@ -161,11 +161,10 @@ gateScore = sigmoid(x)
 score = gateScore * sectorWeight
 ```
 
-**`normalizeRetrieval`** (`scoring.ts:57-67`):
+**`normalizeRetrieval`** (`scoring.ts:57-61`):
 ```
 retrievalScore = count > 0 ? log(1 + count) / log(1 + 10) : 0
-strengthScore  = log(strength) / log(1 + 10)
-return min(1, retrievalScore + strengthScore)
+return min(1, retrievalScore)
 ```
 
 ### 3c. Working Memory Gating
@@ -192,8 +191,8 @@ When a new semantic fact `{subject, predicate, object}` is ingested:
 1. **Find active facts**: Query all non-expired facts for the same subject (`sqlite-store.ts:632-648`)
 2. **Semantic predicate matching**: Embed the new predicate and each existing predicate; match if cosine similarity >= 0.9 (`sqlite-store.ts:654-696`). This lets `"is co-founder of"` match `"cofounded"`.
 3. **Determine action** (`consolidation.ts:23-43`):
-   - **No existing facts** → `insert` (new fact with `strength = 1.0`)
-   - **Exact object match** (case-insensitive) → `merge` (increment `strength` by 1.0)
+   - **No existing facts** → `insert` (new fact)
+   - **Exact object match** (case-insensitive) → `merge` (skip, add source attribution)
    - **Different object** → `supersede` (close old fact by setting `valid_to = now`, then insert new)
 
 ### 3e. Multi-Profile System
@@ -267,7 +266,6 @@ Knowledge graph triples with temporal validity.
 | `embedding` | json | NOT NULL — embedded on `"subject predicate object"` |
 | `metadata` | json | nullable |
 | `profile_id` | text | NOT NULL DEFAULT 'default' |
-| `strength` | REAL | NOT NULL DEFAULT 1.0 — consolidation evidence count |
 | `source` | text | DEFAULT NULL — relative file path for document-ingested memories |
 
 Indexes: `idx_semantic_subject_pred`, `idx_semantic_object`, `idx_semantic_profile`, `idx_semantic_slot`
@@ -342,7 +340,7 @@ The provider layer abstracts LLM and embedding API calls behind a two-provider r
 - `deleteMemory(id, profile)` — Deletes across all 3 tables
 - `getSummary(limit, profile)` — UNION ALL across tables for dashboard
 - `getAvailableProfiles()` / `deleteProfile(slug)` — Profile CRUD
-- Graph helpers: `findActiveFactsForSubject()`, `findSemanticallyMatchingFacts()`, `strengthenFact()`, `supersedeFact()`
+- Graph helpers: `findActiveFactsForSubject()`, `findSemanticallyMatchingFacts()`, `supersedeFact()`
 - Dedup helpers: `findDuplicateMemory()`, `findDuplicateProcedural()`, `setMemorySource()`, `setProceduralSource()`, `setSemanticSource()`
 
 **`documents.ts`** — Document ingestion module:
@@ -386,9 +384,9 @@ POST /v1/ingest { messages, profile }
             ├─ findActiveFactsForSubject(subject, profile)
             ├─ findSemanticallyMatchingFacts(predicate, facts, threshold=0.9)
             ├─ determineConsolidationAction(newFact, matchingFacts)
-            │    ├─ merge → strengthenFact(targetId, delta=1.0)
+            │    ├─ merge → skip (add source attribution)
             │    ├─ supersede → supersedeFact(targetId) + INSERT new
-            │    └─ insert → INSERT new with strength=1.0
+            │    └─ insert → INSERT new
             └─ INSERT into semantic_memory (if not merge)
 ```
 
@@ -415,9 +413,7 @@ POST /v1/ingest/documents { path, profile }
                  │    ├─ Duplicate found → skip (add source attribution to existing)
                  │    └─ No duplicate → INSERT with source
                  │
-                 ├─ Semantic: consolidation as normal, but on merge:
-                 │    ├─ deduplicate=true → skip strengthenFact, just add source
-                 │    └─ deduplicate=false → strengthenFact as before
+                 ├─ Semantic: consolidation as normal, on merge → add source attribution
                  │
                  └─ Procedural: embed trigger → findDuplicateProcedural (cosine > 0.9)
                       ├─ Duplicate found → skip (add source attribution to existing)
@@ -512,7 +508,7 @@ Ingest markdown files from a directory (or single file). Chunks by headings, ext
 
 **Deduplication strategy:**
 - **Episodic**: Embed content, compare against existing rows for same sector+profile. Skip if cosine similarity > 0.9.
-- **Semantic**: Uses existing consolidation. On merge (same subject+predicate+object), skips the strength bump to avoid inflating ranking. Adds source attribution to existing fact.
+- **Semantic**: Uses existing consolidation. On merge (same subject+predicate+object), adds source attribution to existing fact.
 - **Procedural**: Embed trigger, compare against existing procedural rows. Skip if cosine similarity > 0.9.
 
 ### `POST /v1/search`
@@ -811,7 +807,7 @@ sqlite3 memory/memory.db
 SELECT sector, COUNT(*) FROM memory GROUP BY sector;
 
 # View semantic triples
-SELECT subject, predicate, object, strength, valid_to IS NULL as active FROM semantic_memory;
+SELECT subject, predicate, object, valid_to IS NULL as active FROM semantic_memory;
 
 # Check procedural memories
 SELECT trigger, goal, steps FROM procedural_memory;

@@ -102,7 +102,6 @@ export class SqliteMemoryStore {
         validTo: null,
         createdAt,
         updatedAt: createdAt,
-        strength: 1.0,
         source,
         domain,
         originType: origin?.originType,
@@ -345,7 +344,7 @@ export class SqliteMemoryStore {
          where agent_id = @agentId ${userFilter}
          union all
          select id, 'semantic' as sector, subject || ' → ' || predicate || ' → ' || object as content, json('[]') as embedding, created_at as createdAt, updated_at as lastAccessed,
-                json_object('subject', subject, 'predicate', predicate, 'object', object, 'validFrom', valid_from, 'validTo', valid_to, 'strength', strength, 'metadata', metadata, 'domain', domain) as details,
+                json_object('subject', subject, 'predicate', predicate, 'object', object, 'validFrom', valid_from, 'validTo', valid_to, 'metadata', metadata, 'domain', domain) as details,
                 null as eventStart, null as eventEnd, 0 as retrievalCount, user_scope as userScope, source
          from semantic_memory
          where agent_id = @agentId
@@ -460,7 +459,7 @@ export class SqliteMemoryStore {
          where agent_id = @agentId and user_scope = @userId
          union all
          select id, 'semantic' as sector, subject || ' → ' || predicate || ' → ' || object as content, json('[]') as embedding, created_at as createdAt, updated_at as lastAccessed,
-                json_object('subject', subject, 'predicate', predicate, 'object', object, 'validFrom', valid_from, 'validTo', valid_to, 'strength', strength, 'domain', domain) as details,
+                json_object('subject', subject, 'predicate', predicate, 'object', object, 'validFrom', valid_from, 'validTo', valid_to, 'domain', domain) as details,
                 null as eventStart, null as eventEnd, 0 as retrievalCount
          from semantic_memory
          where agent_id = @agentId and user_scope = @userId
@@ -496,7 +495,7 @@ export class SqliteMemoryStore {
          where agent_id = @agentId and user_scope is null
          union all
          select id, 'semantic' as sector, subject || ' → ' || predicate || ' → ' || object as content, json('[]') as embedding, created_at as createdAt, updated_at as lastAccessed,
-                json_object('subject', subject, 'predicate', predicate, 'object', object, 'validFrom', valid_from, 'validTo', valid_to, 'strength', strength, 'domain', domain) as details,
+                json_object('subject', subject, 'predicate', predicate, 'object', object, 'validFrom', valid_from, 'validTo', valid_to, 'domain', domain) as details,
                 null as eventStart, null as eventEnd, 0 as retrievalCount
          from semantic_memory
          where agent_id = @agentId and user_scope is null
@@ -676,10 +675,10 @@ export class SqliteMemoryStore {
     this.db
       .prepare(
         `insert into semantic_memory (
-          id, subject, predicate, object, valid_from, valid_to, created_at, updated_at, embedding, metadata, agent_id, strength, source,
+          id, subject, predicate, object, valid_from, valid_to, created_at, updated_at, embedding, metadata, agent_id, source,
           domain, origin_type, origin_actor, origin_ref, user_scope
         ) values (
-          @id, @subject, @predicate, @object, @validFrom, @validTo, @createdAt, @updatedAt, json(@embedding), json(@metadata), @agentId, @strength, @source,
+          @id, @subject, @predicate, @object, @validFrom, @validTo, @createdAt, @updatedAt, json(@embedding), json(@metadata), @agentId, @source,
           @domain, @originType, @originActor, @originRef, @userScope
         )`,
       )
@@ -695,7 +694,6 @@ export class SqliteMemoryStore {
         embedding: JSON.stringify(row.embedding),
         metadata: row.metadata ? JSON.stringify(row.metadata) : null,
         agentId: row.agentId ?? DEFAULT_AGENT,
-        strength: row.strength ?? 1.0,
         source: row.source ?? null,
         domain: row.domain ?? null,
         originType: row.originType ?? null,
@@ -804,12 +802,12 @@ export class SqliteMemoryStore {
     const rows = this.db.prepare(
       `select id, subject, predicate, object, valid_from as validFrom, valid_to as validTo,
               created_at as createdAt, updated_at as updatedAt, embedding, metadata, agent_id as agentId,
-              strength, domain
+              domain
        from semantic_memory
        where agent_id = @agentId
          and (valid_to is null or valid_to > @now)
          ${userFilter}
-       order by strength desc, updated_at desc
+       order by updated_at desc
        limit @limit`,
     ).all({ limit, agentId, now, userId }) as any[];
 
@@ -817,7 +815,6 @@ export class SqliteMemoryStore {
       ...row,
       embedding: JSON.parse(row.embedding) as number[],
       metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
-      strength: row.strength ?? 1.0,
     }));
   }
 
@@ -921,7 +918,6 @@ export class SqliteMemoryStore {
           embedding json not null,
           metadata json,
           agent_id text not null default '${DEFAULT_AGENT}',
-          strength real not null default 1.0,
           source text,
           domain text,
           origin_type text,
@@ -1059,21 +1055,6 @@ export class SqliteMemoryStore {
     });
 
     return matchingFacts;
-  }
-
-  /**
-   * Strengthen an existing semantic fact (merge operation).
-   * Increases strength by delta and updates timestamp.
-   */
-  strengthenFact(id: string, delta: number = 1.0): void {
-    this.db
-      .prepare(
-        `UPDATE semantic_memory
-         SET strength = strength + @delta,
-             updated_at = @now
-         WHERE id = @id`
-      )
-      .run({ id, delta, now: this.now() });
   }
 
   /**
