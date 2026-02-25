@@ -151,7 +151,6 @@ export interface GraphTraversalOptions {
 
 export interface IngestOptions {
   source?: string;
-  deduplicate?: boolean;
   origin?: MemoryOrigin;
   userId?: string;
 }

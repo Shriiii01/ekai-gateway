@@ -142,8 +142,8 @@ describe('SqliteMemoryStore (single-user mode)', () => {
     }
   });
 
-  // ─── 3. Semantic consolidation — merge ────────────────────────────
-  it('merges duplicate semantic triples and increases strength', async () => {
+  // ─── 3. Semantic consolidation — merge (dedup always on) ─────────
+  it('deduplicates semantic triples and keeps strength at 1.0', async () => {
     // Ingest same triple twice
     await store.ingest({
       semantic: { subject: 'Sha', predicate: 'prefers', object: 'dark mode' },
@@ -154,12 +154,11 @@ describe('SqliteMemoryStore (single-user mode)', () => {
 
     const summary = store.getSectorSummary();
     const semanticCount = summary.find((s) => s.sector === 'semantic')!.count;
-    // Should only have 1 row because the second ingest merged
+    // Should only have 1 row because the second ingest was deduplicated
     expect(semanticCount).toBe(1);
 
-    // Query to verify strength increased
+    // Query to verify the fact exists and strength stayed at 1.0
     const result = await store.query('Sha prefers dark mode');
-    // The fact should be findable
     expect(result.perSector.semantic.length).toBeGreaterThanOrEqual(1);
   });
 

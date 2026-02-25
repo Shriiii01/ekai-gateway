@@ -46,7 +46,6 @@ export class SqliteMemoryStore {
     const createdAt = this.now();
     const rows: MemoryRecord[] = [];
     const source = options?.source;
-    const dedup = options?.deduplicate === true;
     const origin = options?.origin;
     const userId = options?.userId;
 
@@ -60,27 +59,21 @@ export class SqliteMemoryStore {
     if (episodic && typeof episodic === 'string' && episodic.trim()) {
       const embedding = await this.embed(episodic, 'episodic');
 
-      if (dedup) {
-        const existingDup = this.findDuplicateMemory(embedding, 'episodic', agentId, 0.9);
-        if (existingDup) {
-          if (source && !existingDup.source) {
-            this.setMemorySource(existingDup.id, source);
-          }
-          rows.push({
-            id: existingDup.id,
-            sector: 'episodic',
-            content: existingDup.content,
-            embedding,
-            agentId,
-            createdAt: existingDup.createdAt,
-            lastAccessed: existingDup.lastAccessed,
-            source: existingDup.source ?? source,
-          });
-        } else {
-          const row = this.buildEpisodicRow(episodic, embedding, agentId, createdAt, source, origin, userId);
-          this.insertRow(row);
-          rows.push(row);
+      const existingDup = this.findDuplicateMemory(embedding, 'episodic', agentId, 0.9);
+      if (existingDup) {
+        if (source && !existingDup.source) {
+          this.setMemorySource(existingDup.id, source);
         }
+        rows.push({
+          id: existingDup.id,
+          sector: 'episodic',
+          content: existingDup.content,
+          embedding,
+          agentId,
+          createdAt: existingDup.createdAt,
+          lastAccessed: existingDup.lastAccessed,
+          source: existingDup.source ?? source,
+        });
       } else {
         const row = this.buildEpisodicRow(episodic, embedding, agentId, createdAt, source, origin, userId);
         this.insertRow(row);
@@ -132,11 +125,7 @@ export class SqliteMemoryStore {
 
       switch (action.type) {
         case 'merge':
-          if (dedup) {
-            if (source) this.setSemanticSource(action.targetId, source);
-          } else {
-            this.strengthenFact(action.targetId);
-          }
+          if (source) this.setSemanticSource(action.targetId, source);
           rows.push({
             id: action.targetId,
             sector: 'semantic',
@@ -223,35 +212,21 @@ export class SqliteMemoryStore {
         const embedding = await this.embed(textToEmbed, 'procedural');
         procRow.embedding = embedding;
 
-        if (dedup) {
-          const existingDup = this.findDuplicateProcedural(embedding, agentId, 0.9);
-          if (existingDup) {
-            if (source && !existingDup.source) {
-              this.setProceduralSource(existingDup.id, source);
-            }
-            rows.push({
-              id: existingDup.id,
-              sector: 'procedural',
-              content: existingDup.trigger,
-              embedding,
-              agentId,
-              createdAt: existingDup.createdAt,
-              lastAccessed: existingDup.lastAccessed,
-              source: existingDup.source ?? source,
-            });
-          } else {
-            this.insertProceduralRow(procRow);
-            rows.push({
-              id: procRow.id,
-              sector: 'procedural',
-              content: procRow.trigger,
-              embedding,
-              agentId,
-              createdAt,
-              lastAccessed: createdAt,
-              source,
-            });
+        const existingDup = this.findDuplicateProcedural(embedding, agentId, 0.9);
+        if (existingDup) {
+          if (source && !existingDup.source) {
+            this.setProceduralSource(existingDup.id, source);
           }
+          rows.push({
+            id: existingDup.id,
+            sector: 'procedural',
+            content: existingDup.trigger,
+            embedding,
+            agentId,
+            createdAt: existingDup.createdAt,
+            lastAccessed: existingDup.lastAccessed,
+            source: existingDup.source ?? source,
+          });
         } else {
           this.insertProceduralRow(procRow);
           rows.push({
