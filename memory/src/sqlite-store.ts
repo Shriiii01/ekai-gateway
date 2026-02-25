@@ -385,36 +385,38 @@ export class SqliteMemoryStore {
 
   // --- Agent Management ---
 
-  addAgent(id: string, opts?: { name?: string; soulMd?: string }): AgentInfo {
+  addAgent(id: string, opts?: { name?: string; soulMd?: string; relevancePrompt?: string }): AgentInfo {
     const agentId = normalizeAgentId(id);
     const now = this.now();
     const name = opts?.name ?? agentId;
     const soulMd = opts?.soulMd ?? null;
+    const relevancePrompt = opts?.relevancePrompt ?? null;
     this.db
       .prepare(
-        `INSERT INTO agents (id, name, soul_md, created_at)
-         VALUES (@id, @name, @soulMd, @createdAt)
+        `INSERT INTO agents (id, name, soul_md, relevance_prompt, created_at)
+         VALUES (@id, @name, @soulMd, @relevancePrompt, @createdAt)
          ON CONFLICT(id) DO UPDATE SET
            name = @name,
-           soul_md = @soulMd`,
+           soul_md = @soulMd,
+           relevance_prompt = @relevancePrompt`,
       )
-      .run({ id: agentId, name, soulMd, createdAt: now });
-    return { id: agentId, name, soulMd: soulMd ?? undefined, createdAt: now };
+      .run({ id: agentId, name, soulMd, relevancePrompt, createdAt: now });
+    return { id: agentId, name, soulMd: soulMd ?? undefined, relevancePrompt: relevancePrompt ?? undefined, createdAt: now };
   }
 
   getAgent(agentId: string): AgentInfo | undefined {
     const row = this.db
-      .prepare('SELECT id, name, soul_md as soulMd, created_at as createdAt FROM agents WHERE id = @id')
-      .get({ id: agentId }) as { id: string; name: string; soulMd: string | null; createdAt: number } | undefined;
+      .prepare('SELECT id, name, soul_md as soulMd, relevance_prompt as relevancePrompt, created_at as createdAt FROM agents WHERE id = @id')
+      .get({ id: agentId }) as { id: string; name: string; soulMd: string | null; relevancePrompt: string | null; createdAt: number } | undefined;
     if (!row) return undefined;
-    return { id: row.id, name: row.name, soulMd: row.soulMd ?? undefined, createdAt: row.createdAt };
+    return { id: row.id, name: row.name, soulMd: row.soulMd ?? undefined, relevancePrompt: row.relevancePrompt ?? undefined, createdAt: row.createdAt };
   }
 
   getAgents(): AgentInfo[] {
     const rows = this.db
-      .prepare('SELECT id, name, soul_md as soulMd, created_at as createdAt FROM agents ORDER BY id')
-      .all() as Array<{ id: string; name: string; soulMd: string | null; createdAt: number }>;
-    return rows.map((r) => ({ id: r.id, name: r.name, soulMd: r.soulMd ?? undefined, createdAt: r.createdAt }));
+      .prepare('SELECT id, name, soul_md as soulMd, relevance_prompt as relevancePrompt, created_at as createdAt FROM agents ORDER BY id')
+      .all() as Array<{ id: string; name: string; soulMd: string | null; relevancePrompt: string | null; createdAt: number }>;
+    return rows.map((r) => ({ id: r.id, name: r.name, soulMd: r.soulMd ?? undefined, relevancePrompt: r.relevancePrompt ?? undefined, createdAt: r.createdAt }));
   }
 
   // --- Agent Users ---
@@ -976,6 +978,13 @@ export class SqliteMemoryStore {
         )`,
       )
       .run();
+
+    // Migration: add relevance_prompt column to agents table (idempotent)
+    try {
+      this.db.prepare('ALTER TABLE agents ADD COLUMN relevance_prompt text default null').run();
+    } catch (_) {
+      // Column already exists — ignore
+    }
 
     // Ensure the default agent always exists
     this.ensureAgentExists(DEFAULT_AGENT);

@@ -8,6 +8,7 @@ export interface AgentInfo {
   id: string;
   name: string;
   soulMd?: string;
+  relevancePrompt?: string;
   createdAt: number;
 }
 

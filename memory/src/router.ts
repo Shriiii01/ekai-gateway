@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import type { SqliteMemoryStore } from './sqlite-store.js';
 import type { ExtractFn } from './types.js';
 import { extract as defaultExtract } from './providers/extract.js';
+import { checkRelevance } from './providers/relevance.js';
 import { normalizeAgentId } from './utils.js';
 import type { IngestComponents } from './types.js';
 
@@ -26,11 +27,11 @@ export function createMemoryRouter(store: SqliteMemoryStore, extractFn?: Extract
 
   router.post('/v1/agents', (req: Request, res: Response) => {
     try {
-      const { id, name, soul } = req.body as { id?: string; name?: string; soul?: string };
+      const { id, name, soul, relevancePrompt } = req.body as { id?: string; name?: string; soul?: string; relevancePrompt?: string };
       if (!id || !id.trim()) {
         return res.status(400).json({ error: 'id is required' });
       }
-      const agent = store.addAgent(id.trim(), { name: name?.trim(), soulMd: soul });
+      const agent = store.addAgent(id.trim(), { name: name?.trim(), soulMd: soul, relevancePrompt });
       res.json({ agent });
     } catch (err: any) {
       if (err?.message === 'invalid_agent') {
@@ -57,6 +58,46 @@ export function createMemoryRouter(store: SqliteMemoryStore, extractFn?: Extract
     }
   };
   router.delete('/v1/agents/:slug', handleDeleteAgent);
+
+  router.get('/v1/agents/:slug', (req: Request, res: Response) => {
+    try {
+      const { slug } = req.params;
+      const normalizedAgent = normalizeAgentId(slug);
+      const agent = store.getAgent(normalizedAgent);
+      if (!agent) {
+        return res.status(404).json({ error: 'agent_not_found' });
+      }
+      res.json({ agent });
+    } catch (err: any) {
+      if (err?.message === 'invalid_agent') {
+        return res.status(400).json({ error: 'invalid_agent' });
+      }
+      res.status(500).json({ error: err.message ?? 'failed to get agent' });
+    }
+  });
+
+  router.put('/v1/agents/:slug', (req: Request, res: Response) => {
+    try {
+      const { slug } = req.params;
+      const normalizedAgent = normalizeAgentId(slug);
+      const existing = store.getAgent(normalizedAgent);
+      if (!existing) {
+        return res.status(404).json({ error: 'agent_not_found' });
+      }
+      const { name, soul, relevancePrompt } = req.body as { name?: string; soul?: string; relevancePrompt?: string | null };
+      const agent = store.addAgent(normalizedAgent, {
+        name: name?.trim() ?? existing.name,
+        soulMd: soul !== undefined ? soul : existing.soulMd,
+        relevancePrompt: relevancePrompt !== undefined ? (relevancePrompt ?? undefined) : existing.relevancePrompt,
+      });
+      res.json({ agent });
+    } catch (err: any) {
+      if (err?.message === 'invalid_agent') {
+        return res.status(400).json({ error: 'invalid_agent' });
+      }
+      res.status(500).json({ error: err.message ?? 'failed to update agent' });
+    }
+  });
 
   router.post('/v1/ingest', async (req: Request, res: Response) => {
     const { messages, agent, userId } = req.body as {
@@ -88,6 +129,19 @@ export function createMemoryRouter(store: SqliteMemoryStore, extractFn?: Extract
     const sourceText = allMessages
       .map((m) => `${m.role === 'assistant' ? 'Assistant' : 'User'}: ${m.content.trim()}`)
       .join('\n\n');
+
+    // Relevance gate: skip extraction + embedding if agent has a relevance prompt and content is irrelevant
+    const agentInfo = store.getAgent(normalizedAgent);
+    if (agentInfo?.relevancePrompt) {
+      try {
+        const check = await checkRelevance(sourceText, agentInfo.relevancePrompt);
+        if (!check.relevant) {
+          return res.json({ stored: 0, ids: [], filtered: true, reason: check.reason });
+        }
+      } catch (_) {
+        // Fail-open: proceed with ingestion on error
+      }
+    }
 
     let finalComponents: IngestComponents | undefined;
 
