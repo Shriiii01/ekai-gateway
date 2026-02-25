@@ -21,8 +21,9 @@ import { Memory } from '@ekai/memory';
 // Provider config is global — shared across all agents
 const mem = new Memory({ provider: 'openai', apiKey: 'sk-...' });
 
-// Register an agent (soul is optional)
+// Register an agent (soul and relevancePrompt are optional)
 mem.addAgent('my-bot', { name: 'My Bot', soul: 'You are helpful' });
+mem.addAgent('chef-bot', { name: 'Chef', relevancePrompt: 'Only store memories about cooking and recipes' });
 
 // Get a scoped instance — all data ops go through this
 const bot = mem.agent('my-bot');
@@ -104,6 +105,7 @@ graph TB
   classDef output fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
 
   IN["POST /v1/ingest<br>messages + userId"]:::input
+  RG{"Relevance Gate<br>(if relevancePrompt)"}:::engine
   EXT["Agent Reflection (LLM)<br>first-person, multi-fact"]:::process
 
   EP["Episodic"]:::sector
@@ -123,7 +125,8 @@ graph TB
   OUT["Response"]:::output
   SUM["GET /v1/summary"]:::input
 
-  IN --> EXT
+  IN --> RG -->|relevant| EXT
+  RG -->|irrelevant| OUT
   EXT --> EP & SE & PR & RE
   SE --> CON
   EP & CON & PR & RE --> EMB --> DB
@@ -191,6 +194,12 @@ Ingest a conversation. Full conversation (user + assistant) goes to the LLM for 
 { "stored": 3, "ids": ["...", "...", "..."], "agent": "my-bot" }
 ```
 
+If the agent has a `relevancePrompt` and the content is irrelevant, the response short-circuits:
+
+```json
+{ "stored": 0, "ids": [], "filtered": true, "reason": "Content is about geography, not cooking" }
+```
+
 ### `POST /v1/search`
 
 Search with PBWM gating. Pass `userId` for user-scoped retrieval.
@@ -239,13 +248,29 @@ List all registered agents.
 
 ### `POST /v1/agents`
 
-Register a new agent. `name` and `soul` are optional.
+Register a new agent. `name`, `soul`, and `relevancePrompt` are optional.
 
 ```json
-{ "id": "my-bot", "name": "My Bot", "soul": "You are helpful and concise" }
+{ "id": "my-bot", "name": "My Bot", "soul": "You are helpful", "relevancePrompt": "Only store cooking-related memories" }
 ```
 ```json
-{ "agent": { "id": "my-bot", "name": "My Bot", "soulMd": "You are helpful and concise", "createdAt": 1700000000 } }
+{ "agent": { "id": "my-bot", "name": "My Bot", "soulMd": "You are helpful", "relevancePrompt": "Only store cooking-related memories", "createdAt": 1700000000 } }
+```
+
+### `GET /v1/agents/:slug`
+
+Get a single agent by ID.
+
+```json
+{ "agent": { "id": "my-bot", "name": "My Bot", "relevancePrompt": "...", "createdAt": 1700000000 } }
+```
+
+### `PUT /v1/agents/:slug`
+
+Update agent properties. Set `relevancePrompt` to `null` to remove it.
+
+```json
+{ "name": "Updated Name", "relevancePrompt": null }
 ```
 
 ### `DELETE /v1/agents/:slug`
@@ -304,6 +329,8 @@ Graph visualization data (nodes + edges). Query: `?entity=Sha&maxDepth=2&maxNode
 |--------|----------|-------------|
 | GET | `/v1/agents` | List agents |
 | POST | `/v1/agents` | Create agent |
+| GET | `/v1/agents/:slug` | Get single agent |
+| PUT | `/v1/agents/:slug` | Update agent |
 | DELETE | `/v1/agents/:slug` | Delete agent + memories |
 | POST | `/v1/ingest` | Ingest conversation |
 | POST | `/v1/search` | Search with PBWM gating |
@@ -353,7 +380,7 @@ erDiagram
     procedural_memory { text id PK; text trigger; json steps; text user_scope; text origin_type }
     reflective_memory { text id PK; text observation; text origin_type; text origin_actor }
     agent_users { text agent_id PK; text user_id PK; int interaction_count }
-    agents { text id PK; text name; text soul_md; int created_at }
+    agents { text id PK; text name; text soul_md; text relevance_prompt; int created_at }
 ```
 
 All tables share: `embedding`, `created_at`, `last_accessed`, `agent_id`, `source`, `origin_type`, `origin_actor`, `origin_ref`. Clean schema — no migrations, old DBs re-create.

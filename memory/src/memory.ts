@@ -9,6 +9,7 @@ import type {
   ProviderName,
   QueryResult,
 } from './types.js';
+import { checkRelevance } from './providers/relevance.js';
 
 export interface MemoryConfig {
   provider?: ProviderName;
@@ -51,8 +52,8 @@ export class Memory {
   // --- Management (always available) ---
 
   /** Register an agent. `soul` is optional agent-level context/personality. */
-  addAgent(id: string, opts?: { name?: string; soul?: string }): AgentInfo {
-    return this.store.addAgent(id, { name: opts?.name, soulMd: opts?.soul });
+  addAgent(id: string, opts?: { name?: string; soul?: string; relevancePrompt?: string }): AgentInfo {
+    return this.store.addAgent(id, { name: opts?.name, soulMd: opts?.soul, relevancePrompt: opts?.relevancePrompt });
   }
 
   getAgents(): AgentInfo[] {
@@ -81,7 +82,7 @@ export class Memory {
   async add(
     messages: Array<{ role: string; content: string }>,
     opts?: { userId?: string },
-  ): Promise<{ stored: number; ids: string[] }> {
+  ): Promise<{ stored: number; ids: string[]; filtered?: boolean; reason?: string }> {
     const agent = this.requireAgent();
 
     const allMessages = messages.filter((m) => m.content?.trim());
@@ -90,6 +91,14 @@ export class Memory {
       .join('\n\n');
 
     if (!sourceText) return { stored: 0, ids: [] };
+
+    const agentInfo = this.store.getAgent(agent);
+    if (agentInfo?.relevancePrompt) {
+      const check = await checkRelevance(sourceText, agentInfo.relevancePrompt);
+      if (!check.relevant) {
+        return { stored: 0, ids: [], filtered: true, reason: check.reason };
+      }
+    }
 
     const components = await this.extractFn(sourceText);
     if (!components) return { stored: 0, ids: [] };

@@ -2,6 +2,7 @@ export * from './types.js';
 export * from './sqlite-store.js';
 export { embed, createEmbedFn } from './providers/embed.js';
 export { extract, createExtractFn } from './providers/extract.js';
+export { checkRelevance } from './providers/relevance.js';
 export * from './providers/prompt.js';
 export { PROVIDERS } from './providers/registry.js';
 export type { ProviderConfig } from './providers/registry.js';

@@ -158,16 +158,20 @@ export default function MemoryVaultPage() {
   };
 
 
+  const sectorOrder: Record<string, number> = { episodic: 0, procedural: 1, semantic: 2 };
+
   const filteredMemories = useMemo(() => {
     if (!data?.recent) return [];
-    return data.recent.filter((item) => {
-      // Exclude reflective memories (disabled)
-      if (item.sector === 'reflective') return false;
-      const matchesSearch = !searchTerm || item.preview.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesSector = filterSector === 'all' || item.sector === filterSector;
-      const matchesUser = !selectedUserId || item.userScope === selectedUserId;
-      return matchesSearch && matchesSector && matchesUser;
-    });
+    return data.recent
+      .filter((item) => {
+        // Exclude reflective memories (disabled)
+        if (item.sector === 'reflective') return false;
+        const matchesSearch = !searchTerm || item.preview.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesSector = filterSector === 'all' || item.sector === filterSector;
+        const matchesUser = !selectedUserId || item.userScope === selectedUserId;
+        return matchesSearch && matchesSector && matchesUser;
+      })
+      .sort((a, b) => (sectorOrder[a.sector] ?? 99) - (sectorOrder[b.sector] ?? 99));
   }, [data, searchTerm, filterSector, selectedUserId]);
 
   // Filter out reflective memories from display data, and apply user scope filter
@@ -233,7 +237,7 @@ export default function MemoryVaultPage() {
   return (
     <div className="min-h-screen font-sans text-slate-800" style={{ backgroundColor: '#FFFCEC' }}>
       {/* Header */}
-      <header className="bg-white/80 backdrop-blur-sm border-b border-stone-200 sticky top-0 z-20">
+      <header className="bg-white/80 backdrop-blur-sm border-b border-stone-200 sticky top-11 z-20">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">

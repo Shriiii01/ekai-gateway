@@ -3,9 +3,16 @@ import type { Request, Response } from 'express';
 import type { SqliteMemoryStore } from './sqlite-store.js';
 import type { ExtractFn } from './types.js';
 import { extract as defaultExtract } from './providers/extract.js';
+import { checkRelevance } from './providers/relevance.js';
 import { normalizeAgentId } from './utils.js';
 import type { IngestComponents } from './types.js';
 
+
+function routeError(err: any, res: Response, fallback = 'operation failed') {
+  if (err?.message === 'invalid_agent') return res.status(400).json({ error: 'invalid_agent' });
+  if (err?.message === 'agent_not_found') return res.status(404).json({ error: 'agent_not_found' });
+  res.status(500).json({ error: err?.message ?? fallback });
+}
 
 /**
  * Creates an Express Router with all memory API routes.
@@ -26,17 +33,14 @@ export function createMemoryRouter(store: SqliteMemoryStore, extractFn?: Extract
 
   router.post('/v1/agents', (req: Request, res: Response) => {
     try {
-      const { id, name, soul } = req.body as { id?: string; name?: string; soul?: string };
+      const { id, name, soul, relevancePrompt } = req.body as { id?: string; name?: string; soul?: string; relevancePrompt?: string };
       if (!id || !id.trim()) {
         return res.status(400).json({ error: 'id is required' });
       }
-      const agent = store.addAgent(id.trim(), { name: name?.trim(), soulMd: soul });
+      const agent = store.addAgent(id.trim(), { name: name?.trim(), soulMd: soul, relevancePrompt });
       res.json({ agent });
     } catch (err: any) {
-      if (err?.message === 'invalid_agent') {
-        return res.status(400).json({ error: 'invalid_agent' });
-      }
-      res.status(500).json({ error: err.message ?? 'failed to add agent' });
+      routeError(err, res, 'failed to add agent');
     }
   });
 
@@ -47,16 +51,47 @@ export function createMemoryRouter(store: SqliteMemoryStore, extractFn?: Extract
       const deleted = store.deleteAgent(normalizedAgent);
       res.json({ deleted, agent: normalizedAgent });
     } catch (err: any) {
-      if (err?.message === 'invalid_agent') {
-        return res.status(400).json({ error: 'invalid_agent' });
-      }
       if (err?.message === 'cannot_delete_default_agent') {
         return res.status(400).json({ error: 'default_agent_protected' });
       }
-      res.status(500).json({ error: err.message ?? 'delete agent failed' });
+      routeError(err, res, 'delete agent failed');
     }
   };
   router.delete('/v1/agents/:slug', handleDeleteAgent);
+
+  router.get('/v1/agents/:slug', (req: Request, res: Response) => {
+    try {
+      const { slug } = req.params;
+      const normalizedAgent = normalizeAgentId(slug);
+      const agent = store.getAgent(normalizedAgent);
+      if (!agent) {
+        return res.status(404).json({ error: 'agent_not_found' });
+      }
+      res.json({ agent });
+    } catch (err: any) {
+      routeError(err, res, 'failed to get agent');
+    }
+  });
+
+  router.put('/v1/agents/:slug', (req: Request, res: Response) => {
+    try {
+      const { slug } = req.params;
+      const normalizedAgent = normalizeAgentId(slug);
+      const existing = store.getAgent(normalizedAgent);
+      if (!existing) {
+        return res.status(404).json({ error: 'agent_not_found' });
+      }
+      const { name, soul, relevancePrompt } = req.body as { name?: string; soul?: string; relevancePrompt?: string | null };
+      const agent = store.addAgent(normalizedAgent, {
+        name: name?.trim() ?? existing.name,
+        soulMd: soul !== undefined ? soul : existing.soulMd,
+        relevancePrompt: relevancePrompt !== undefined ? (relevancePrompt ?? undefined) : existing.relevancePrompt,
+      });
+      res.json({ agent });
+    } catch (err: any) {
+      routeError(err, res, 'failed to update agent');
+    }
+  });
 
   router.post('/v1/ingest', async (req: Request, res: Response) => {
     const { messages, agent, userId } = req.body as {
@@ -89,6 +124,19 @@ export function createMemoryRouter(store: SqliteMemoryStore, extractFn?: Extract
       .map((m) => `${m.role === 'assistant' ? 'Assistant' : 'User'}: ${m.content.trim()}`)
       .join('\n\n');
 
+    // Relevance gate: skip extraction + embedding if agent has a relevance prompt and content is irrelevant
+    const agentInfo = store.getAgent(normalizedAgent);
+    if (agentInfo?.relevancePrompt) {
+      try {
+        const check = await checkRelevance(sourceText, agentInfo.relevancePrompt);
+        if (!check.relevant) {
+          return res.json({ stored: 0, ids: [], filtered: true, reason: check.reason });
+        }
+      } catch (_) {
+        // Fail-open: proceed with ingestion on error
+      }
+    }
+
     let finalComponents: IngestComponents | undefined;
 
     try {
@@ -107,7 +155,7 @@ export function createMemoryRouter(store: SqliteMemoryStore, extractFn?: Extract
       });
       res.json({ stored: rows.length, ids: rows.map((r) => r.id), agent: normalizedAgent });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? 'ingest failed' });
+      routeError(err, res, 'ingest failed');
     }
   });
 
@@ -132,10 +180,7 @@ export function createMemoryRouter(store: SqliteMemoryStore, extractFn?: Extract
       }));
       res.json({ summary, recent, agent: normalizedAgent });
     } catch (err: any) {
-      if (err?.message === 'invalid_agent') {
-        return res.status(400).json({ error: 'invalid_agent' });
-      }
-      res.status(500).json({ error: err.message ?? 'summary failed' });
+      routeError(err, res, 'summary failed');
     }
   });
 
@@ -165,7 +210,7 @@ export function createMemoryRouter(store: SqliteMemoryStore, extractFn?: Extract
       }
       res.json({ updated: true, id, agent: normalizedAgent });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? 'update failed' });
+      routeError(err, res, 'update failed');
     }
   });
 
@@ -189,10 +234,7 @@ export function createMemoryRouter(store: SqliteMemoryStore, extractFn?: Extract
       }
       res.json({ deleted, agent: normalizedAgent });
     } catch (err: any) {
-      if (err?.message === 'invalid_agent') {
-        return res.status(400).json({ error: 'invalid_agent' });
-      }
-      res.status(500).json({ error: err.message ?? 'delete failed' });
+      routeError(err, res, 'delete failed');
     }
   });
 
@@ -203,10 +245,7 @@ export function createMemoryRouter(store: SqliteMemoryStore, extractFn?: Extract
       const deleted = store.deleteAll(normalizedAgent);
       res.json({ deleted, agent: normalizedAgent });
     } catch (err: any) {
-      if (err?.message === 'invalid_agent') {
-        return res.status(400).json({ error: 'invalid_agent' });
-      }
-      res.status(500).json({ error: err.message ?? 'delete all failed' });
+      routeError(err, res, 'delete all failed');
     }
   });
 
@@ -224,10 +263,7 @@ export function createMemoryRouter(store: SqliteMemoryStore, extractFn?: Extract
 
       res.json({ deleted });
     } catch (err: any) {
-      if (err?.message === 'invalid_agent') {
-        return res.status(400).json({ error: 'invalid_agent' });
-      }
-      res.status(500).json({ error: err.message ?? 'triple delete failed' });
+      routeError(err, res, 'triple delete failed');
     }
   });
 
@@ -240,10 +276,7 @@ export function createMemoryRouter(store: SqliteMemoryStore, extractFn?: Extract
       const result = await store.query(query, agent, userId);
       res.json(result);
     } catch (err: any) {
-      if (err?.message === 'invalid_agent') {
-        return res.status(400).json({ error: 'invalid_agent' });
-      }
-      res.status(500).json({ error: err.message ?? 'query failed' });
+      routeError(err, res, 'query failed');
     }
   });
 
@@ -256,10 +289,7 @@ export function createMemoryRouter(store: SqliteMemoryStore, extractFn?: Extract
       const users = store.getAgentUsers(normalizedAgent);
       res.json({ users, agent: normalizedAgent });
     } catch (err: any) {
-      if (err?.message === 'invalid_agent') {
-        return res.status(400).json({ error: 'invalid_agent' });
-      }
-      res.status(500).json({ error: err.message ?? 'failed to fetch users' });
+      routeError(err, res, 'failed to fetch users');
     }
   });
 
@@ -285,10 +315,7 @@ export function createMemoryRouter(store: SqliteMemoryStore, extractFn?: Extract
       }));
       res.json({ memories, userId, agent: normalizedAgent });
     } catch (err: any) {
-      if (err?.message === 'invalid_agent') {
-        return res.status(400).json({ error: 'invalid_agent' });
-      }
-      res.status(500).json({ error: err.message ?? 'failed to fetch user memories' });
+      routeError(err, res, 'failed to fetch user memories');
     }
   });
 
@@ -318,10 +345,7 @@ export function createMemoryRouter(store: SqliteMemoryStore, extractFn?: Extract
 
       res.json({ entity, triples, count: triples.length });
     } catch (err: any) {
-      if (err?.message === 'invalid_agent') {
-        return res.status(400).json({ error: 'invalid_agent' });
-      }
-      res.status(500).json({ error: err.message ?? 'graph query failed' });
+      routeError(err, res, 'graph query failed');
     }
   });
 

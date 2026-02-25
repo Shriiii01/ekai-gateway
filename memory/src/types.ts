@@ -8,6 +8,7 @@ export interface AgentInfo {
   id: string;
   name: string;
   soulMd?: string;
+  relevancePrompt?: string;
   createdAt: number;
 }
 
@@ -93,7 +94,6 @@ export interface SemanticMemoryRecord {
   validTo: number | null;
   createdAt: number;
   updatedAt: number;
-  strength: number;           // Evidence count from consolidation (starts at 1.0)
   source?: string;
   metadata?: Record<string, any>;
   domain?: SemanticDomain;
@@ -120,7 +120,7 @@ export interface ReflectiveMemoryRecord {
  * Consolidation action for semantic facts
  */
 export type ConsolidationAction =
-  | { type: 'merge'; targetId: string }     // Same object exists: strengthen it
+  | { type: 'merge'; targetId: string }     // Same object exists: skip (dedup)
   | { type: 'supersede'; targetId: string } // Different object: close old, insert new
   | { type: 'insert' };                     // No existing fact for this slot
 
@@ -151,7 +151,6 @@ export interface GraphTraversalOptions {
 
 export interface IngestOptions {
   source?: string;
-  deduplicate?: boolean;
   origin?: MemoryOrigin;
   userId?: string;
 }

@@ -46,7 +46,6 @@ export class SqliteMemoryStore {
     const createdAt = this.now();
     const rows: MemoryRecord[] = [];
     const source = options?.source;
-    const dedup = options?.deduplicate === true;
     const origin = options?.origin;
     const userId = options?.userId;
 
@@ -60,27 +59,21 @@ export class SqliteMemoryStore {
     if (episodic && typeof episodic === 'string' && episodic.trim()) {
       const embedding = await this.embed(episodic, 'episodic');
 
-      if (dedup) {
-        const existingDup = this.findDuplicateMemory(embedding, 'episodic', agentId, 0.9);
-        if (existingDup) {
-          if (source && !existingDup.source) {
-            this.setMemorySource(existingDup.id, source);
-          }
-          rows.push({
-            id: existingDup.id,
-            sector: 'episodic',
-            content: existingDup.content,
-            embedding,
-            agentId,
-            createdAt: existingDup.createdAt,
-            lastAccessed: existingDup.lastAccessed,
-            source: existingDup.source ?? source,
-          });
-        } else {
-          const row = this.buildEpisodicRow(episodic, embedding, agentId, createdAt, source, origin, userId);
-          this.insertRow(row);
-          rows.push(row);
+      const existingDup = this.findDuplicateMemory(embedding, 'episodic', agentId, 0.9);
+      if (existingDup) {
+        if (source && !existingDup.source) {
+          this.setMemorySource(existingDup.id, source);
         }
+        rows.push({
+          id: existingDup.id,
+          sector: 'episodic',
+          content: existingDup.content,
+          embedding,
+          agentId,
+          createdAt: existingDup.createdAt,
+          lastAccessed: existingDup.lastAccessed,
+          source: existingDup.source ?? source,
+        });
       } else {
         const row = this.buildEpisodicRow(episodic, embedding, agentId, createdAt, source, origin, userId);
         this.insertRow(row);
@@ -109,7 +102,6 @@ export class SqliteMemoryStore {
         validTo: null,
         createdAt,
         updatedAt: createdAt,
-        strength: 1.0,
         source,
         domain,
         originType: origin?.originType,
@@ -132,11 +124,7 @@ export class SqliteMemoryStore {
 
       switch (action.type) {
         case 'merge':
-          if (dedup) {
-            if (source) this.setSemanticSource(action.targetId, source);
-          } else {
-            this.strengthenFact(action.targetId);
-          }
+          if (source) this.setSemanticSource(action.targetId, source);
           rows.push({
             id: action.targetId,
             sector: 'semantic',
@@ -223,35 +211,21 @@ export class SqliteMemoryStore {
         const embedding = await this.embed(textToEmbed, 'procedural');
         procRow.embedding = embedding;
 
-        if (dedup) {
-          const existingDup = this.findDuplicateProcedural(embedding, agentId, 0.9);
-          if (existingDup) {
-            if (source && !existingDup.source) {
-              this.setProceduralSource(existingDup.id, source);
-            }
-            rows.push({
-              id: existingDup.id,
-              sector: 'procedural',
-              content: existingDup.trigger,
-              embedding,
-              agentId,
-              createdAt: existingDup.createdAt,
-              lastAccessed: existingDup.lastAccessed,
-              source: existingDup.source ?? source,
-            });
-          } else {
-            this.insertProceduralRow(procRow);
-            rows.push({
-              id: procRow.id,
-              sector: 'procedural',
-              content: procRow.trigger,
-              embedding,
-              agentId,
-              createdAt,
-              lastAccessed: createdAt,
-              source,
-            });
+        const existingDup = this.findDuplicateProcedural(embedding, agentId, 0.9);
+        if (existingDup) {
+          if (source && !existingDup.source) {
+            this.setProceduralSource(existingDup.id, source);
           }
+          rows.push({
+            id: existingDup.id,
+            sector: 'procedural',
+            content: existingDup.trigger,
+            embedding,
+            agentId,
+            createdAt: existingDup.createdAt,
+            lastAccessed: existingDup.lastAccessed,
+            source: existingDup.source ?? source,
+          });
         } else {
           this.insertProceduralRow(procRow);
           rows.push({
@@ -370,7 +344,7 @@ export class SqliteMemoryStore {
          where agent_id = @agentId ${userFilter}
          union all
          select id, 'semantic' as sector, subject || ' → ' || predicate || ' → ' || object as content, json('[]') as embedding, created_at as createdAt, updated_at as lastAccessed,
-                json_object('subject', subject, 'predicate', predicate, 'object', object, 'validFrom', valid_from, 'validTo', valid_to, 'strength', strength, 'metadata', metadata, 'domain', domain) as details,
+                json_object('subject', subject, 'predicate', predicate, 'object', object, 'validFrom', valid_from, 'validTo', valid_to, 'metadata', metadata, 'domain', domain) as details,
                 null as eventStart, null as eventEnd, 0 as retrievalCount, user_scope as userScope, source
          from semantic_memory
          where agent_id = @agentId
@@ -411,36 +385,38 @@ export class SqliteMemoryStore {
 
   // --- Agent Management ---
 
-  addAgent(id: string, opts?: { name?: string; soulMd?: string }): AgentInfo {
+  addAgent(id: string, opts?: { name?: string; soulMd?: string; relevancePrompt?: string }): AgentInfo {
     const agentId = normalizeAgentId(id);
     const now = this.now();
     const name = opts?.name ?? agentId;
     const soulMd = opts?.soulMd ?? null;
+    const relevancePrompt = opts?.relevancePrompt ?? null;
     this.db
       .prepare(
-        `INSERT INTO agents (id, name, soul_md, created_at)
-         VALUES (@id, @name, @soulMd, @createdAt)
+        `INSERT INTO agents (id, name, soul_md, relevance_prompt, created_at)
+         VALUES (@id, @name, @soulMd, @relevancePrompt, @createdAt)
          ON CONFLICT(id) DO UPDATE SET
            name = @name,
-           soul_md = @soulMd`,
+           soul_md = @soulMd,
+           relevance_prompt = @relevancePrompt`,
       )
-      .run({ id: agentId, name, soulMd, createdAt: now });
-    return { id: agentId, name, soulMd: soulMd ?? undefined, createdAt: now };
+      .run({ id: agentId, name, soulMd, relevancePrompt, createdAt: now });
+    return { id: agentId, name, soulMd: soulMd ?? undefined, relevancePrompt: relevancePrompt ?? undefined, createdAt: now };
   }
 
   getAgent(agentId: string): AgentInfo | undefined {
     const row = this.db
-      .prepare('SELECT id, name, soul_md as soulMd, created_at as createdAt FROM agents WHERE id = @id')
-      .get({ id: agentId }) as { id: string; name: string; soulMd: string | null; createdAt: number } | undefined;
+      .prepare('SELECT id, name, soul_md as soulMd, relevance_prompt as relevancePrompt, created_at as createdAt FROM agents WHERE id = @id')
+      .get({ id: agentId }) as { id: string; name: string; soulMd: string | null; relevancePrompt: string | null; createdAt: number } | undefined;
     if (!row) return undefined;
-    return { id: row.id, name: row.name, soulMd: row.soulMd ?? undefined, createdAt: row.createdAt };
+    return { id: row.id, name: row.name, soulMd: row.soulMd ?? undefined, relevancePrompt: row.relevancePrompt ?? undefined, createdAt: row.createdAt };
   }
 
   getAgents(): AgentInfo[] {
     const rows = this.db
-      .prepare('SELECT id, name, soul_md as soulMd, created_at as createdAt FROM agents ORDER BY id')
-      .all() as Array<{ id: string; name: string; soulMd: string | null; createdAt: number }>;
-    return rows.map((r) => ({ id: r.id, name: r.name, soulMd: r.soulMd ?? undefined, createdAt: r.createdAt }));
+      .prepare('SELECT id, name, soul_md as soulMd, relevance_prompt as relevancePrompt, created_at as createdAt FROM agents ORDER BY id')
+      .all() as Array<{ id: string; name: string; soulMd: string | null; relevancePrompt: string | null; createdAt: number }>;
+    return rows.map((r) => ({ id: r.id, name: r.name, soulMd: r.soulMd ?? undefined, relevancePrompt: r.relevancePrompt ?? undefined, createdAt: r.createdAt }));
   }
 
   // --- Agent Users ---
@@ -485,7 +461,7 @@ export class SqliteMemoryStore {
          where agent_id = @agentId and user_scope = @userId
          union all
          select id, 'semantic' as sector, subject || ' → ' || predicate || ' → ' || object as content, json('[]') as embedding, created_at as createdAt, updated_at as lastAccessed,
-                json_object('subject', subject, 'predicate', predicate, 'object', object, 'validFrom', valid_from, 'validTo', valid_to, 'strength', strength, 'domain', domain) as details,
+                json_object('subject', subject, 'predicate', predicate, 'object', object, 'validFrom', valid_from, 'validTo', valid_to, 'domain', domain) as details,
                 null as eventStart, null as eventEnd, 0 as retrievalCount
          from semantic_memory
          where agent_id = @agentId and user_scope = @userId
@@ -521,7 +497,7 @@ export class SqliteMemoryStore {
          where agent_id = @agentId and user_scope is null
          union all
          select id, 'semantic' as sector, subject || ' → ' || predicate || ' → ' || object as content, json('[]') as embedding, created_at as createdAt, updated_at as lastAccessed,
-                json_object('subject', subject, 'predicate', predicate, 'object', object, 'validFrom', valid_from, 'validTo', valid_to, 'strength', strength, 'domain', domain) as details,
+                json_object('subject', subject, 'predicate', predicate, 'object', object, 'validFrom', valid_from, 'validTo', valid_to, 'domain', domain) as details,
                 null as eventStart, null as eventEnd, 0 as retrievalCount
          from semantic_memory
          where agent_id = @agentId and user_scope is null
@@ -701,10 +677,10 @@ export class SqliteMemoryStore {
     this.db
       .prepare(
         `insert into semantic_memory (
-          id, subject, predicate, object, valid_from, valid_to, created_at, updated_at, embedding, metadata, agent_id, strength, source,
+          id, subject, predicate, object, valid_from, valid_to, created_at, updated_at, embedding, metadata, agent_id, source,
           domain, origin_type, origin_actor, origin_ref, user_scope
         ) values (
-          @id, @subject, @predicate, @object, @validFrom, @validTo, @createdAt, @updatedAt, json(@embedding), json(@metadata), @agentId, @strength, @source,
+          @id, @subject, @predicate, @object, @validFrom, @validTo, @createdAt, @updatedAt, json(@embedding), json(@metadata), @agentId, @source,
           @domain, @originType, @originActor, @originRef, @userScope
         )`,
       )
@@ -720,7 +696,6 @@ export class SqliteMemoryStore {
         embedding: JSON.stringify(row.embedding),
         metadata: row.metadata ? JSON.stringify(row.metadata) : null,
         agentId: row.agentId ?? DEFAULT_AGENT,
-        strength: row.strength ?? 1.0,
         source: row.source ?? null,
         domain: row.domain ?? null,
         originType: row.originType ?? null,
@@ -829,12 +804,12 @@ export class SqliteMemoryStore {
     const rows = this.db.prepare(
       `select id, subject, predicate, object, valid_from as validFrom, valid_to as validTo,
               created_at as createdAt, updated_at as updatedAt, embedding, metadata, agent_id as agentId,
-              strength, domain
+              domain
        from semantic_memory
        where agent_id = @agentId
          and (valid_to is null or valid_to > @now)
          ${userFilter}
-       order by strength desc, updated_at desc
+       order by updated_at desc
        limit @limit`,
     ).all({ limit, agentId, now, userId }) as any[];
 
@@ -842,7 +817,6 @@ export class SqliteMemoryStore {
       ...row,
       embedding: JSON.parse(row.embedding) as number[],
       metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
-      strength: row.strength ?? 1.0,
     }));
   }
 
@@ -946,7 +920,6 @@ export class SqliteMemoryStore {
           embedding json not null,
           metadata json,
           agent_id text not null default '${DEFAULT_AGENT}',
-          strength real not null default 1.0,
           source text,
           domain text,
           origin_type text,
@@ -1006,14 +979,30 @@ export class SqliteMemoryStore {
       )
       .run();
 
+    // Migration: add relevance_prompt column to agents table (idempotent)
+    try {
+      this.db.prepare('ALTER TABLE agents ADD COLUMN relevance_prompt text default null').run();
+    } catch (_) {
+      // Column already exists — ignore
+    }
+
     // Ensure the default agent always exists
-    this.ensureAgentExists(DEFAULT_AGENT);
+    this.upsertDefaultAgent();
+  }
+
+  private upsertDefaultAgent() {
+    this.db
+      .prepare('insert or ignore into agents (id, name, created_at) values (@id, @name, @createdAt)')
+      .run({ id: DEFAULT_AGENT, name: DEFAULT_AGENT, createdAt: this.now() });
   }
 
   ensureAgentExists(agentId: string) {
-    this.db
-      .prepare('insert or ignore into agents (id, name, created_at) values (@id, @name, @createdAt)')
-      .run({ id: agentId, name: agentId, createdAt: this.now() });
+    const exists = this.db
+      .prepare('select 1 from agents where id = @id')
+      .get({ id: agentId });
+    if (!exists) {
+      throw new Error('agent_not_found');
+    }
   }
 
   /**
@@ -1084,21 +1073,6 @@ export class SqliteMemoryStore {
     });
 
     return matchingFacts;
-  }
-
-  /**
-   * Strengthen an existing semantic fact (merge operation).
-   * Increases strength by delta and updates timestamp.
-   */
-  strengthenFact(id: string, delta: number = 1.0): void {
-    this.db
-      .prepare(
-        `UPDATE semantic_memory
-         SET strength = strength + @delta,
-             updated_at = @now
-         WHERE id = @id`
-      )
-      .run({ id, delta, now: this.now() });
   }
 
   /**
