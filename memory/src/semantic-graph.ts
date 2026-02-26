@@ -21,7 +21,7 @@ export class SemanticGraphTraversal {
   findTriplesBySubject(
     subject: string,
     options: GraphTraversalOptions = {},
-  ): SemanticMemoryRecord[] {
+  ): Omit<SemanticMemoryRecord, 'embedding'>[] {
     const { maxResults = 100, includeInvalidated = false, predicateFilter, userId } = options;
     const agentId = normalizeAgentId(options.agent);
     const now = this.now();
@@ -69,7 +69,7 @@ export class SemanticGraphTraversal {
   findTriplesByObject(
     object: string,
     options: GraphTraversalOptions = {},
-  ): SemanticMemoryRecord[] {
+  ): Omit<SemanticMemoryRecord, 'embedding'>[] {
     const { maxResults = 100, includeInvalidated = false, predicateFilter, userId } = options;
     const agentId = normalizeAgentId(options.agent);
     const now = this.now();
@@ -117,13 +117,13 @@ export class SemanticGraphTraversal {
   findConnectedTriples(
     entity: string,
     options: GraphTraversalOptions = {},
-  ): SemanticMemoryRecord[] {
+  ): Omit<SemanticMemoryRecord, 'embedding'>[] {
     const outgoing = this.findTriplesBySubject(entity, options);
     const incoming = this.findTriplesByObject(entity, options);
 
     // Deduplicate by id
     const seen = new Set<string>();
-    const result: SemanticMemoryRecord[] = [];
+    const result: Omit<SemanticMemoryRecord, 'embedding'>[] = [];
 
     for (const triple of [...outgoing, ...incoming]) {
       if (!seen.has(triple.id)) {

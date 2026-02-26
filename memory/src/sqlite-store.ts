@@ -547,7 +547,7 @@ export class SqliteMemoryStore {
         originActor: row.originActor ?? null,
         originRef: row.originRef ?? null,
       });
-    this.insertVecRow('reflective_vec', row.id, row.embedding!);
+    this.insertVecRow('reflective_vec', row.id, row.embedding);
   }
 
   getReflectiveRows(agentId: string, limit: number): ReflectiveMemoryRecord[] {
@@ -648,7 +648,7 @@ export class SqliteMemoryStore {
         originRef: row.originRef ?? null,
         userScope: row.userScope ?? null,
       });
-    this.insertVecRow('memory_vec', row.id, row.embedding!);
+    this.insertVecRow('memory_vec', row.id, row.embedding);
   }
 
   private insertProceduralRow(row: ProceduralMemoryRecord) {
@@ -679,7 +679,7 @@ export class SqliteMemoryStore {
         originRef: row.originRef ?? null,
         userScope: row.userScope ?? null,
       });
-    this.insertVecRow('procedural_vec', row.id, row.embedding!);
+    this.insertVecRow('procedural_vec', row.id, row.embedding);
   }
 
   private insertSemanticRow(row: SemanticMemoryRecord) {
@@ -712,7 +712,7 @@ export class SqliteMemoryStore {
         originRef: row.originRef ?? null,
         userScope: row.userScope ?? null,
       });
-    this.insertVecRow('semantic_vec', row.id, row.embedding!);
+    this.insertVecRow('semantic_vec', row.id, row.embedding);
   }
 
   /**
