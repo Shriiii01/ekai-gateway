@@ -1,5 +1,5 @@
 import type { MemoryRecord, QueryResult, SectorName } from './types.js';
-import { cosineSimilarity, gaussianNoise, sigmoid } from './utils.js';
+import { gaussianNoise, sigmoid } from './utils.js';
 
 const DEFAULT_SECTOR_WEIGHTS: Record<SectorName, number> = {
   episodic: 1,
@@ -20,11 +20,10 @@ const CONTROL_SIGNAL = 0.3;
  * Returns QueryResult plus gateScore for downstream gating.
  */
 export function scoreRowPBWM(
-  row: MemoryRecord,
-  queryEmbedding: number[],
+  row: MemoryRecord & { similarity: number },
   sectorWeight: number = DEFAULT_SECTOR_WEIGHTS[row.sector],
 ): QueryResult & { gateScore: number } {
-  const relevance = cosineSimilarity(queryEmbedding, row.embedding);
+  const relevance = row.similarity;
 
   const expectedValue = normalizeRetrieval(row);
   const noise = gaussianNoise(0, 0.05);

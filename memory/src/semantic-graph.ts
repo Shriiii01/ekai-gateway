@@ -21,13 +21,13 @@ export class SemanticGraphTraversal {
   findTriplesBySubject(
     subject: string,
     options: GraphTraversalOptions = {},
-  ): SemanticMemoryRecord[] {
+  ): Omit<SemanticMemoryRecord, 'embedding'>[] {
     const { maxResults = 100, includeInvalidated = false, predicateFilter, userId } = options;
     const agentId = normalizeAgentId(options.agent);
     const now = this.now();
 
     let query = `select id, subject, predicate, object, valid_from as validFrom, valid_to as validTo,
-                  created_at as createdAt, updated_at as updatedAt, embedding, metadata, agent_id as agentId
+                  created_at as createdAt, updated_at as updatedAt, metadata, agent_id as agentId
            from semantic_memory
            where subject = @subject and agent_id = @agentId`;
 
@@ -59,7 +59,6 @@ export class SemanticGraphTraversal {
 
     return rows.map((row) => ({
       ...row,
-      embedding: JSON.parse((row as any).embedding) as number[],
       metadata: row.metadata ? JSON.parse(row.metadata as any) : undefined,
     }));
   }
@@ -70,13 +69,13 @@ export class SemanticGraphTraversal {
   findTriplesByObject(
     object: string,
     options: GraphTraversalOptions = {},
-  ): SemanticMemoryRecord[] {
+  ): Omit<SemanticMemoryRecord, 'embedding'>[] {
     const { maxResults = 100, includeInvalidated = false, predicateFilter, userId } = options;
     const agentId = normalizeAgentId(options.agent);
     const now = this.now();
 
     let query = `select id, subject, predicate, object, valid_from as validFrom, valid_to as validTo,
-                  created_at as createdAt, updated_at as updatedAt, embedding, metadata, agent_id as agentId
+                  created_at as createdAt, updated_at as updatedAt, metadata, agent_id as agentId
            from semantic_memory
            where object = @object and agent_id = @agentId`;
 
@@ -108,7 +107,6 @@ export class SemanticGraphTraversal {
 
     return rows.map((row) => ({
       ...row,
-      embedding: JSON.parse((row as any).embedding) as number[],
       metadata: row.metadata ? JSON.parse(row.metadata as any) : undefined,
     }));
   }
@@ -119,13 +117,13 @@ export class SemanticGraphTraversal {
   findConnectedTriples(
     entity: string,
     options: GraphTraversalOptions = {},
-  ): SemanticMemoryRecord[] {
+  ): Omit<SemanticMemoryRecord, 'embedding'>[] {
     const outgoing = this.findTriplesBySubject(entity, options);
     const incoming = this.findTriplesByObject(entity, options);
 
     // Deduplicate by id
     const seen = new Set<string>();
-    const result: SemanticMemoryRecord[] = [];
+    const result: Omit<SemanticMemoryRecord, 'embedding'>[] = [];
 
     for (const triple of [...outgoing, ...incoming]) {
       if (!seen.has(triple.id)) {
