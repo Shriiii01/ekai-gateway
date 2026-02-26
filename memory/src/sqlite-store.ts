@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { randomUUID } from 'crypto';
+import * as sqliteVec from 'sqlite-vec';
 import type {
   AgentInfo,
   EmbedFn,
@@ -23,17 +24,20 @@ import { SemanticGraphTraversal } from './semantic-graph.js';
 const SECTORS: SectorName[] = ['episodic', 'semantic', 'procedural'];
 const PER_SECTOR_K = 4;
 const WORKING_MEMORY_CAP = 8;
-const SECTOR_SCAN_LIMIT = 200; // simple scan instead of ANN for v0
+const VEC_KNN_LIMIT = 50; // generous KNN limit to account for post-filters
 const DEFAULT_RETRIEVAL_COUNT = 0;
 
 export class SqliteMemoryStore {
   private db: Database.Database;
   private embed: EmbedFn;
   private now: () => number;
+  private vecReady = false;
+  private embeddingDim = 0;
   public readonly graph: SemanticGraphTraversal;
 
   constructor(opts: { dbPath: string; embed: EmbedFn; now?: () => number }) {
     this.db = new Database(opts.dbPath);
+    sqliteVec.load(this.db);
     this.embed = opts.embed;
     this.now = opts.now ?? (() => Date.now());
     this.prepareSchema();
@@ -257,6 +261,8 @@ export class SqliteMemoryStore {
       queryEmbeddings[sector] = await this.embed(queryText, sector);
     }
 
+    this.ensureVecReady(queryEmbeddings.episodic);
+
     const perSectorResults: Record<SectorName, QueryResult[]> = {
       episodic: [],
       semantic: [],
@@ -264,16 +270,15 @@ export class SqliteMemoryStore {
     };
 
     for (const sector of SECTORS) {
-      const candidates = this.getCandidatesForSector(sector, agentId, userId);
+      const candidates = this.vecQueryForSector(sector, queryEmbeddings[sector], agentId, userId);
       const scored = candidates
-        .filter((row) => cosineSimilarity(queryEmbeddings[sector], row.embedding) >= 0.2)
-        .map((row) => scoreRowPBWM(row, queryEmbeddings[sector], PBWM_SECTOR_WEIGHTS[sector]))
+        .filter((row) => row.similarity >= 0.2)
+        .map((row) => scoreRowPBWM(row, PBWM_SECTOR_WEIGHTS[sector]))
         .sort((a, b) => b.gateScore - a.gateScore)
         .slice(0, PER_SECTOR_K)
         .map((row) => ({
           ...row,
           agentId,
-          // propagate temporal fields for episodic; procedural has none
           eventStart: (row as any).eventStart ?? null,
           eventEnd: (row as any).eventEnd ?? null,
           details: (row as any).details,
@@ -542,6 +547,7 @@ export class SqliteMemoryStore {
         originActor: row.originActor ?? null,
         originRef: row.originRef ?? null,
       });
+    this.insertVecRow('reflective_vec', row.id, row.embedding!);
   }
 
   getReflectiveRows(agentId: string, limit: number): ReflectiveMemoryRecord[] {
@@ -614,6 +620,7 @@ export class SqliteMemoryStore {
   }
 
   private insertRow(row: MemoryRecord) {
+    const embeddingJson = JSON.stringify(row.embedding);
     this.db
       .prepare(
         `insert into memory (
@@ -628,7 +635,7 @@ export class SqliteMemoryStore {
         id: row.id,
         sector: row.sector,
         content: row.content,
-        embedding: JSON.stringify(row.embedding),
+        embedding: embeddingJson,
         createdAt: row.createdAt,
         lastAccessed: row.lastAccessed,
         eventStart: row.eventStart ?? null,
@@ -641,6 +648,7 @@ export class SqliteMemoryStore {
         originRef: row.originRef ?? null,
         userScope: row.userScope ?? null,
       });
+    this.insertVecRow('memory_vec', row.id, row.embedding!);
   }
 
   private insertProceduralRow(row: ProceduralMemoryRecord) {
@@ -671,6 +679,7 @@ export class SqliteMemoryStore {
         originRef: row.originRef ?? null,
         userScope: row.userScope ?? null,
       });
+    this.insertVecRow('procedural_vec', row.id, row.embedding!);
   }
 
   private insertSemanticRow(row: SemanticMemoryRecord) {
@@ -703,10 +712,12 @@ export class SqliteMemoryStore {
         originRef: row.originRef ?? null,
         userScope: row.userScope ?? null,
       });
+    this.insertVecRow('semantic_vec', row.id, row.embedding!);
   }
 
   /**
    * Find a near-duplicate in the memory table (episodic) by embedding similarity.
+   * Uses sqlite-vec ANN search.
    */
   private findDuplicateMemory(
     embedding: number[],
@@ -714,27 +725,61 @@ export class SqliteMemoryStore {
     agentId: string,
     threshold: number,
   ): (MemoryRecord & { source?: string }) | null {
-    const candidates = this.getRowsForSector(sector, agentId, SECTOR_SCAN_LIMIT);
-    for (const row of candidates) {
-      if (cosineSimilarity(embedding, row.embedding) >= threshold) {
-        return row as MemoryRecord & { source?: string };
-      }
+    this.ensureVecReady(embedding);
+    const distanceThreshold = 1 - threshold; // cosine distance = 1 - similarity
+    const queryJson = JSON.stringify(embedding);
+
+    // Step 1: KNN on vec table
+    const knnRows = this.db.prepare(
+      `SELECT memory_id, distance FROM memory_vec WHERE embedding MATCH @query AND k = 5`,
+    ).all({ query: queryJson }) as Array<{ memory_id: string; distance: number }>;
+
+    // Step 2: Check against main table filters
+    for (const knn of knnRows) {
+      if (knn.distance > distanceThreshold) break; // sorted by distance, no more matches
+      const row = this.db.prepare(
+        `SELECT id, sector, content, created_at as createdAt, last_accessed as lastAccessed,
+                event_start as eventStart, event_end as eventEnd, retrieval_count as retrievalCount,
+                agent_id as agentId, source
+         FROM memory WHERE id = @id AND agent_id = @agentId AND sector = @sector`,
+      ).get({ id: knn.memory_id, agentId, sector }) as any;
+      if (row) return row as MemoryRecord & { source?: string };
     }
     return null;
   }
 
   /**
    * Find a near-duplicate procedural memory by trigger embedding similarity.
+   * Uses sqlite-vec ANN search.
    */
   private findDuplicateProcedural(
     embedding: number[],
     agentId: string,
     threshold: number,
   ): (ProceduralMemoryRecord & { source?: string }) | null {
-    const candidates = this.getProceduralRows(agentId, SECTOR_SCAN_LIMIT);
-    for (const row of candidates) {
-      if (cosineSimilarity(embedding, row.embedding) >= threshold) {
-        return row as ProceduralMemoryRecord & { source?: string };
+    this.ensureVecReady(embedding);
+    const distanceThreshold = 1 - threshold;
+    const queryJson = JSON.stringify(embedding);
+
+    // Step 1: KNN on vec table
+    const knnRows = this.db.prepare(
+      `SELECT memory_id, distance FROM procedural_vec WHERE embedding MATCH @query AND k = 5`,
+    ).all({ query: queryJson }) as Array<{ memory_id: string; distance: number }>;
+
+    // Step 2: Check against main table filters
+    for (const knn of knnRows) {
+      if (knn.distance > distanceThreshold) break;
+      const row = this.db.prepare(
+        `SELECT id, trigger, goal, context, result, steps,
+                created_at as createdAt, last_accessed as lastAccessed,
+                agent_id as agentId, source
+         FROM procedural_memory WHERE id = @id AND agent_id = @agentId`,
+      ).get({ id: knn.memory_id, agentId }) as any;
+      if (row) {
+        return {
+          ...row,
+          steps: JSON.parse(row.steps) as string[],
+        } as ProceduralMemoryRecord & { source?: string };
       }
     }
     return null;
@@ -752,89 +797,124 @@ export class SqliteMemoryStore {
     this.db.prepare('UPDATE semantic_memory SET source = @source WHERE id = @id').run({ id, source });
   }
 
-  private getCandidatesForSector(sector: SectorName, agentId: string, userId?: string): MemoryRecord[] {
+  /**
+   * ANN vector query for a sector. Returns candidates with precomputed similarity.
+   * Uses a two-step approach: KNN on vec table, then filter via main table.
+   */
+  private vecQueryForSector(
+    sector: SectorName,
+    queryEmbedding: number[],
+    agentId: string,
+    userId?: string,
+  ): Array<MemoryRecord & { similarity: number }> {
+    const queryJson = JSON.stringify(queryEmbedding);
+    const k = VEC_KNN_LIMIT;
+
     switch (sector) {
-      case 'procedural':
-        return this.getProceduralRows(agentId, SECTOR_SCAN_LIMIT, userId).map((r) => ({
-          id: r.id,
-          sector: 'procedural' as SectorName,
-          content: r.trigger,
-          embedding: r.embedding,
-          agentId: r.agentId,
-          createdAt: r.createdAt,
-          lastAccessed: r.lastAccessed,
-          details: { trigger: r.trigger, goal: r.goal, context: r.context, result: r.result, steps: r.steps },
-        } as any));
-      case 'semantic':
-        return this.getSemanticRows(agentId, SECTOR_SCAN_LIMIT, userId).map((r) => ({
-          id: r.id,
-          sector: 'semantic' as SectorName,
-          content: `${r.subject} ${r.predicate} ${r.object}`,
-          embedding: r.embedding ?? [],
-          agentId: r.agentId,
-          createdAt: r.createdAt,
-          lastAccessed: r.updatedAt,
-          details: { subject: r.subject, predicate: r.predicate, object: r.object, validFrom: r.validFrom, validTo: r.validTo, domain: r.domain },
-        } as any));
-      default:
-        return this.getRowsForSector(sector, agentId, SECTOR_SCAN_LIMIT, userId);
+      case 'procedural': {
+        const knnRows = this.db.prepare(
+          `SELECT memory_id, distance FROM procedural_vec WHERE embedding MATCH @query AND k = @k`,
+        ).all({ query: queryJson, k }) as Array<{ memory_id: string; distance: number }>;
+
+        if (knnRows.length === 0) return [];
+        const ids = knnRows.map((r) => r.memory_id);
+        const distMap = new Map(knnRows.map((r) => [r.memory_id, r.distance]));
+        const placeholders = ids.map(() => '?').join(',');
+        const userFilter = userId ? `AND (user_scope IS NULL OR user_scope = ?)` : '';
+        const params: any[] = [...ids, agentId];
+        if (userId) params.push(userId);
+
+        const rows = this.db.prepare(`
+          SELECT id, 'procedural' as sector, trigger as content,
+                 created_at as createdAt, last_accessed as lastAccessed,
+                 agent_id as agentId, source,
+                 trigger, goal, context, result, steps
+          FROM procedural_memory
+          WHERE id IN (${placeholders}) AND agent_id = ? ${userFilter}
+        `).all(...params) as any[];
+
+        return rows.map((row: any) => ({
+          ...row,
+          steps: typeof row.steps === 'string' ? JSON.parse(row.steps) : row.steps,
+          similarity: 1 - (distMap.get(row.id) ?? 1),
+          details: {
+            trigger: row.trigger,
+            goal: row.goal,
+            context: row.context,
+            result: row.result,
+            steps: typeof row.steps === 'string' ? JSON.parse(row.steps) : row.steps,
+          },
+        }));
+      }
+      case 'semantic': {
+        const knnRows = this.db.prepare(
+          `SELECT memory_id, distance FROM semantic_vec WHERE embedding MATCH @query AND k = @k`,
+        ).all({ query: queryJson, k }) as Array<{ memory_id: string; distance: number }>;
+
+        if (knnRows.length === 0) return [];
+        const ids = knnRows.map((r) => r.memory_id);
+        const distMap = new Map(knnRows.map((r) => [r.memory_id, r.distance]));
+        const placeholders = ids.map(() => '?').join(',');
+        const now = this.now();
+        const userFilter = userId ? `AND (user_scope IS NULL OR user_scope = ?)` : '';
+        const params: any[] = [...ids, agentId, now];
+        if (userId) params.push(userId);
+
+        const rows = this.db.prepare(`
+          SELECT id, 'semantic' as sector,
+                 subject || ' ' || predicate || ' ' || object as content,
+                 created_at as createdAt, updated_at as lastAccessed,
+                 agent_id as agentId,
+                 subject, predicate, object, valid_from as validFrom, valid_to as validTo, domain
+          FROM semantic_memory
+          WHERE id IN (${placeholders}) AND agent_id = ?
+            AND (valid_to IS NULL OR valid_to > ?)
+            ${userFilter}
+        `).all(...params) as any[];
+
+        return rows.map((row: any) => ({
+          ...row,
+          similarity: 1 - (distMap.get(row.id) ?? 1),
+          details: {
+            subject: row.subject,
+            predicate: row.predicate,
+            object: row.object,
+            validFrom: row.validFrom,
+            validTo: row.validTo,
+            domain: row.domain,
+          },
+        }));
+      }
+      default: {
+        // episodic — from memory table
+        const knnRows = this.db.prepare(
+          `SELECT memory_id, distance FROM memory_vec WHERE embedding MATCH @query AND k = @k`,
+        ).all({ query: queryJson, k }) as Array<{ memory_id: string; distance: number }>;
+
+        if (knnRows.length === 0) return [];
+        const ids = knnRows.map((r) => r.memory_id);
+        const distMap = new Map(knnRows.map((r) => [r.memory_id, r.distance]));
+        const placeholders = ids.map(() => '?').join(',');
+        const userFilter = userId ? `AND (user_scope IS NULL OR user_scope = ?)` : '';
+        const params: any[] = [...ids, agentId, sector];
+        if (userId) params.push(userId);
+
+        const rows = this.db.prepare(`
+          SELECT id, sector, content,
+                 created_at as createdAt, last_accessed as lastAccessed,
+                 event_start as eventStart, event_end as eventEnd,
+                 retrieval_count as retrievalCount,
+                 agent_id as agentId, source
+          FROM memory
+          WHERE id IN (${placeholders}) AND agent_id = ? AND sector = ? ${userFilter}
+        `).all(...params) as any[];
+
+        return rows.map((row: any) => ({
+          ...row,
+          similarity: 1 - (distMap.get(row.id) ?? 1),
+        }));
+      }
     }
-  }
-
-  private getRowsForSector(sector: SectorName, agentId: string, limit: number, userId?: string): MemoryRecord[] {
-    const userFilter = userId ? 'and (user_scope is null or user_scope = @userId)' : '';
-    const rows = this.db.prepare(
-      `select id, sector, content, embedding, created_at as createdAt, last_accessed as lastAccessed,
-              event_start as eventStart, event_end as eventEnd, retrieval_count as retrievalCount, agent_id as agentId, source
-       from memory
-       where sector = @sector and agent_id = @agentId ${userFilter}
-       order by last_accessed desc
-       limit @limit`,
-    ).all({ sector, limit, agentId, userId }) as Array<Omit<MemoryRecord, 'embedding'>>;
-
-    return rows.map((row) => ({
-      ...row,
-      embedding: JSON.parse((row as any).embedding) as number[],
-    }));
-  }
-
-  private getSemanticRows(agentId: string, limit: number, userId?: string): SemanticMemoryRecord[] {
-    const now = this.now();
-    const userFilter = userId ? 'and (user_scope is null or user_scope = @userId)' : '';
-    const rows = this.db.prepare(
-      `select id, subject, predicate, object, valid_from as validFrom, valid_to as validTo,
-              created_at as createdAt, updated_at as updatedAt, embedding, metadata, agent_id as agentId,
-              domain
-       from semantic_memory
-       where agent_id = @agentId
-         and (valid_to is null or valid_to > @now)
-         ${userFilter}
-       order by updated_at desc
-       limit @limit`,
-    ).all({ limit, agentId, now, userId }) as any[];
-
-    return rows.map((row: any) => ({
-      ...row,
-      embedding: JSON.parse(row.embedding) as number[],
-      metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
-    }));
-  }
-
-  private getProceduralRows(agentId: string, limit: number, userId?: string): ProceduralMemoryRecord[] {
-    const userFilter = userId ? 'and (user_scope is null or user_scope = @userId)' : '';
-    const rows = this.db.prepare(
-      `select id, trigger, goal, context, result, steps, embedding, created_at as createdAt, last_accessed as lastAccessed, agent_id as agentId, source
-       from procedural_memory
-       where agent_id = @agentId ${userFilter}
-       order by last_accessed desc
-       limit @limit`,
-    ).all({ limit, agentId, userId }) as Array<Omit<ProceduralMemoryRecord, 'embedding' | 'steps'>>;
-
-    return rows.map((row) => ({
-      ...row,
-      steps: JSON.parse((row as any).steps) as string[],
-      embedding: JSON.parse((row as any).embedding) as number[],
-    }));
   }
 
   private touchRows(ids: string[], sector?: SectorName) {
@@ -1122,6 +1202,11 @@ export class SqliteMemoryStore {
     );
     const res = stmt.run(...params);
 
+    if (res.changes > 0) {
+      this.deleteVecRow('memory_vec', id);
+      this.insertVecRow('memory_vec', id, embedding);
+    }
+
     return res.changes > 0;
   }
 
@@ -1132,12 +1217,30 @@ export class SqliteMemoryStore {
     const res2 = this.db.prepare('delete from procedural_memory where id = ? and agent_id = ?').run(id, agentId);
     const res3 = this.db.prepare('delete from semantic_memory where id = ? and agent_id = ?').run(id, agentId);
     const res4 = this.db.prepare('delete from reflective_memory where id = ? and agent_id = ?').run(id, agentId);
-    return (res1.changes ?? 0) + (res2.changes ?? 0) + (res3.changes ?? 0) + (res4.changes ?? 0);
+    const total = (res1.changes ?? 0) + (res2.changes ?? 0) + (res3.changes ?? 0) + (res4.changes ?? 0);
+    if (total > 0 && this.vecReady) {
+      this.deleteVecRow('memory_vec', id);
+      this.deleteVecRow('procedural_vec', id);
+      this.deleteVecRow('semantic_vec', id);
+      this.deleteVecRow('reflective_vec', id);
+    }
+    return total;
   }
 
   deleteAll(agent?: string): number {
     const agentId = normalizeAgentId(agent);
     this.ensureAgentExists(agentId);
+    // Collect IDs for vec table cleanup before deleting
+    if (this.vecReady) {
+      const memIds = this.db.prepare('SELECT id FROM memory WHERE agent_id = ?').all(agentId) as Array<{ id: string }>;
+      const procIds = this.db.prepare('SELECT id FROM procedural_memory WHERE agent_id = ?').all(agentId) as Array<{ id: string }>;
+      const semIds = this.db.prepare('SELECT id FROM semantic_memory WHERE agent_id = ?').all(agentId) as Array<{ id: string }>;
+      const refIds = this.db.prepare('SELECT id FROM reflective_memory WHERE agent_id = ?').all(agentId) as Array<{ id: string }>;
+      for (const { id } of memIds) this.deleteVecRow('memory_vec', id);
+      for (const { id } of procIds) this.deleteVecRow('procedural_vec', id);
+      for (const { id } of semIds) this.deleteVecRow('semantic_vec', id);
+      for (const { id } of refIds) this.deleteVecRow('reflective_vec', id);
+    }
     const res1 = this.db.prepare('delete from memory where agent_id = ?').run(agentId);
     const res2 = this.db.prepare('delete from procedural_memory where agent_id = ?').run(agentId);
     const res3 = this.db.prepare('delete from semantic_memory where agent_id = ?').run(agentId);
@@ -1163,6 +1266,9 @@ export class SqliteMemoryStore {
     const agentId = normalizeAgentId(agent);
     this.ensureAgentExists(agentId);
     const res = this.db.prepare('delete from semantic_memory where id = ? and agent_id = ?').run(id, agentId);
+    if ((res.changes ?? 0) > 0 && this.vecReady) {
+      this.deleteVecRow('semantic_vec', id);
+    }
     return res.changes ?? 0;
   }
 
@@ -1177,5 +1283,61 @@ export class SqliteMemoryStore {
          where id in (${placeholders})`,
       )
       .run(this.now(), ...ids);
+  }
+
+  // --- sqlite-vec helpers ---
+
+  /**
+   * Ensure vec tables exist. Called lazily on first embed/query.
+   */
+  private ensureVecReady(embedding: number[]) {
+    if (this.vecReady) return;
+    this.embeddingDim = embedding.length;
+    this.createVecTables();
+    this.vecReady = true;
+  }
+
+  /**
+   * Create the vec0 virtual tables for each sector.
+   */
+  private createVecTables() {
+    const N = this.embeddingDim;
+    const tables = ['memory_vec', 'procedural_vec', 'semantic_vec', 'reflective_vec'];
+    for (const table of tables) {
+      this.db.prepare(
+        `CREATE VIRTUAL TABLE IF NOT EXISTS ${table} USING vec0(
+          +memory_id text,
+          embedding float[${N}] distance_metric=cosine
+        )`,
+      ).run();
+    }
+  }
+
+  /**
+   * Insert a row into a vec0 virtual table.
+   */
+  private insertVecRow(vecTable: string, id: string, embedding: number[]) {
+    if (!this.vecReady) {
+      this.ensureVecReady(embedding);
+    }
+    this.db
+      .prepare(`INSERT INTO ${vecTable}(memory_id, embedding) VALUES (@id, @embedding)`)
+      .run({ id, embedding: JSON.stringify(embedding) });
+  }
+
+  /**
+   * Delete a row from a vec0 virtual table by memory_id.
+   * Uses a subquery to find the rowid from the auxiliary column.
+   */
+  private deleteVecRow(vecTable: string, id: string) {
+    if (!this.vecReady) return;
+    // vec0 tables require deletion by rowid.
+    // We find the rowid via the auxiliary memory_id column.
+    const row = this.db
+      .prepare(`SELECT rowid FROM ${vecTable} WHERE memory_id = @id`)
+      .get({ id }) as { rowid: number } | undefined;
+    if (row) {
+      this.db.prepare(`DELETE FROM ${vecTable} WHERE rowid = ?`).run(row.rowid);
+    }
   }
 }

@@ -52,7 +52,7 @@ export interface MemoryRecord {
   id: string;
   sector: SectorName;
   content: string;
-  embedding: number[];
+  embedding?: number[];
   agentId: string;
   createdAt: number;
   lastAccessed: number;
@@ -73,7 +73,7 @@ export interface ProceduralMemoryRecord {
   context?: string;
   result?: string;
   steps: string[];
-  embedding: number[];
+  embedding?: number[];
   createdAt: number;
   lastAccessed: number;
   source?: string;
@@ -89,7 +89,7 @@ export interface SemanticMemoryRecord {
   predicate: string;
   object: string;
   agentId: string;
-  embedding: number[];
+  embedding?: number[];
   validFrom: number;
   validTo: number | null;
   createdAt: number;
@@ -107,7 +107,7 @@ export interface ReflectiveMemoryRecord {
   id: string;
   observation: string;
   agentId: string;
-  embedding: number[];
+  embedding?: number[];
   createdAt: number;
   lastAccessed: number;
   source?: string;
