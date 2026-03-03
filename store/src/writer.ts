@@ -53,11 +53,11 @@ export class EventWriter {
       ctx: input.ctx,
     };
 
-    // Only store raw IDs if sanitization changed the value
-    if (input.agentId && sanitizedAgentId !== input.agentId) {
+    // Store raw IDs for traceability (sanitizeId always appends a hash suffix)
+    if (input.agentId) {
       storeEvent.rawAgentId = input.agentId;
     }
-    if (input.sessionId && sanitizedSessionId !== input.sessionId) {
+    if (input.sessionId) {
       storeEvent.rawSessionId = input.sessionId;
     }
 
