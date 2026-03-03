@@ -18,6 +18,7 @@ export interface StoreEvent {
   userId?: string;
   event: Record<string, any>;
   ctx?: Record<string, any>;
+  _error?: string;
 }
 
 // --- Append Input (what callers pass in) ---
@@ -32,6 +33,7 @@ export interface AppendInput {
   userId?: string;
   event: Record<string, any>;
   ctx?: Record<string, any>;
+  _error?: string;
 }
 
 // --- Reconstructed Types ---
