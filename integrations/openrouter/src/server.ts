@@ -8,6 +8,7 @@ import { PORT, MEMORY_DB_PATH, OPENROUTER_API_KEY } from './config.js';
 import { initMemory, fetchMemoryContext, ingestMessages } from './memory-client.js';
 import { formatMemoryBlock, injectMemory } from './memory.js';
 import { proxyToOpenRouter } from './proxy.js';
+import { applyDeterministicParams } from './deterministic.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -38,12 +39,19 @@ app.get('/health', (_req, res) => {
 
 app.post('/v1/chat/completions', async (req, res) => {
   try {
-    const body = req.body;
+    let body = req.body;
     // userId from body.user (PydanticAI openai_user), header, or undefined
     const userId = body.user || (req.headers['x-memory-user'] as string) || undefined;
     // Pass through client's API key if provided, otherwise proxy.ts falls back to env
     const authHeader = req.headers['authorization'] as string | undefined;
     const clientKey = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
+
+    // Apply deterministic params if requested (X-Deterministic: true or body.deterministic: true)
+    const { body: deterministicBody, seed } = applyDeterministicParams(
+      body,
+      req.headers['x-deterministic'] as string | undefined,
+    );
+    body = deterministicBody;
 
     // Extract last user message for memory query
     const lastUserMsg = [...(body.messages || [])]
@@ -75,7 +83,7 @@ app.post('/v1/chat/completions', async (req, res) => {
     // runaway memory growth (no dedup). Will re-enable with proper deduplication.
     // ingestMessages(originalMessages, profile);
 
-    await proxyToOpenRouter(body, res, clientKey);
+    await proxyToOpenRouter(body, res, clientKey, seed);
   } catch (err: any) {
     console.error(`[server] unhandled error: ${err.message}`);
     if (!res.headersSent) {
