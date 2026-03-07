@@ -1,7 +1,6 @@
 import { ResponsesPassthrough, ResponsesPassthroughConfig } from './responses-passthrough.js';
 import { OpenAIResponsesPassthrough } from './openai-responses-passthrough.js';
 import { OllamaResponsesPassthrough } from './ollama-responses-passthrough.js';
-<<<<<<< HEAD
 import { XAIResponsesPassthrough } from './xai-responses-passthrough.js';
 import { loadResponsesProviderDefinitions, ResponsesProviderDefinition } from './responses-provider-config.js';
 import { logger } from '../utils/logger.js';
